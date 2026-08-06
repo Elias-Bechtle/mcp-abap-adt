@@ -1,51 +1,61 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.mario-andreschak/mcp-abap-adt",
-  "description": "ABAP ADT MCP server for reading SAP objects (programs, classes, tables, CDS) via ADT",
-  "version": "1.2.0",
+  "name": "io.github.janfrl/mcp-abap-adt",
+  "description": "ABAP ADT MCP server for reading SAP objects (programs, classes, tables, CDS) via ADT, with multi-system and OS keychain support",
+  "version": "2.0.0",
   "repository": {
-    "url": "https://github.com/mario-andreschak/mcp-abap-adt",
+    "url": "https://github.com/janfrl/mcp-abap-adt",
     "source": "github"
   },
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "mcp-abap-adt",
-      "version": "1.2.0",
+      "identifier": "@janfrl/mcp-abap-adt",
+      "version": "2.0.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "SAP_URL",
-          "description": "Base URL of the SAP system, e.g. https://host:443",
-          "isRequired": true
+          "description": "Base URL of the SAP system, e.g. https://host:44300. Required unless systems are declared in a config file.",
+          "isRequired": false
         },
         {
           "name": "SAP_USERNAME",
           "description": "SAP username",
-          "isRequired": true
+          "isRequired": false
         },
         {
           "name": "SAP_PASSWORD",
           "description": "SAP password",
-          "isRequired": true,
+          "isRequired": false,
           "isSecret": true
         },
         {
           "name": "SAP_CLIENT",
-          "description": "SAP client number",
-          "isRequired": true
+          "description": "Three digit SAP client, e.g. 100",
+          "isRequired": false
         },
         {
           "name": "SAP_LANGUAGE",
-          "description": "Logon language, e.g. en",
+          "description": "Logon language, e.g. EN",
           "isRequired": false
         },
         {
           "name": "TLS_REJECT_UNAUTHORIZED",
-          "description": "Set to 0 to allow self-signed certificates, 1 to enforce TLS verification",
+          "description": "Set to 0 to accept self-signed certificates. Certificates are verified by default.",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_ABAP_ADT_CONFIG",
+          "description": "Path to a configuration file declaring several named SAP systems",
+          "isRequired": false
+        },
+        {
+          "name": "MCP_ABAP_ADT_DEBUG",
+          "description": "Set to 1 for additional diagnostics on stderr",
           "isRequired": false
         }
       ]

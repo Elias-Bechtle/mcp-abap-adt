@@ -1,6 +1,6 @@
 {
   "name": "@janfrl/mcp-abap-adt",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "mcpName": "io.github.janfrl/mcp-abap-adt",
   "type": "module",
   "main": "dist/index.js",

@@ -1,256 +1,203 @@
-# mcp-abap-adt: Your Gateway to ABAP Development Tools (ADT)
+# mcp-abap-adt
 
-This project provides a server that allows you to interact with SAP ABAP systems using the Model Context Protocol (MCP).  Think of it as a bridge that lets tools like [FLUJO](https://github.com/mario-andreschak/FLUJO), [Claude](https://claude.com/download) or [Cline](https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev) (a VS Code extension) talk to your ABAP system and retrieve information like source code, table structures, and more.  It's like having a remote control for your ABAP development environment!
+An MCP server that lets tools like [Claude Code](https://claude.com/claude-code), [Claude Desktop](https://claude.com/download) or [Cline](https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev) read from your SAP ABAP systems through ADT (ABAP Development Tools): program and class sources, table structures and contents, CDS views, packages, and more.
 
-The server is published on npm as [`mcp-abap-adt`](https://www.npmjs.com/package/mcp-abap-adt) and listed in the [MCP Registry](https://registry.modelcontextprotocol.io) as `io.github.mario-andreschak/mcp-abap-adt`, so most MCP clients can install it with a single command.
+This is a fork of [mario-andreschak/mcp-abap-adt](https://github.com/mario-andreschak/mcp-abap-adt) that adds:
 
-This guide is designed for beginners, so we'll walk through everything step-by-step.  We'll cover:
+- **Several SAP systems at once** — name them in a config file and pick one per tool call.
+- **No passwords in files** — read credentials from the OS keychain, sharing entries with the SAP Fiori tools VS Code extension, or from environment variables.
+- **Certificate verification on by default**, with a per-system opt-out.
 
-1.  **Prerequisites:** What you need before you start.
-2.  **Installation and Setup:**  Getting everything up and running.
-3.  **Running the Server:**  Starting the server in different modes.
-4.  **Integrating with FLUJO:** The easiest way — one-click install from the Spotlight/Marketplace.
-5.  **Integrating with Cline:** Connecting this server to the Cline VS Code extension.
-6.  **Integrating with Claude Desktop:** Adding the server to the Claude Desktop app.
-7.  **Integrating with Claude Code:** Adding the server via `.mcp.json` or the CLI.
-8.  **Troubleshooting:**  Common problems and solutions.
-9.  **Available Tools:**  A list of the commands you can use.
+## Contents
 
-## 1. Prerequisites
+1. [Requirements](#1-requirements)
+2. [Installation](#2-installation)
+3. [Configuring SAP systems](#3-configuring-sap-systems)
+4. [Credentials](#4-credentials)
+5. [Connecting an MCP client](#5-connecting-an-mcp-client)
+6. [Available tools](#6-available-tools)
+7. [Troubleshooting](#7-troubleshooting)
+8. [Upgrading from 1.x](#8-upgrading-from-1x)
+9. [Development](#9-development)
 
-Before you begin, you'll need a few things:
+## 1. Requirements
 
-*   **An SAP ABAP System:**  This server connects to an existing ABAP system.  You'll need:
-    *   The system's URL (e.g., `https://my-sap-system.com:8000`)
-    *   A valid username and password for that system.
-    *   The SAP client number (e.g., `100`).
-    *   Ensure that your SAP system allows connections via ADT (ABAP Development Tools). This usually involves making sure the necessary services are activated in transaction `SICF`.  Your basis administrator can help with this. Specifically, you will need the following services to be active:
-        * `/sap/bc/adt`
+- **Node.js 22 or newer.** Check with `node -v`.
+- **An SAP ABAP system reachable over HTTP(S)** with the ADT services active. Your basis administrator can activate `/sap/bc/adt` in transaction `SICF`. You also need a user with the authorizations to read the objects you ask for.
 
-*   **Node.js and npm:** Node.js is a JavaScript runtime that lets you run JavaScript code outside of a web browser.  npm (Node Package Manager) is included with Node.js and is used to install packages (libraries of code).
-    *   [Download Node.js](https://nodejs.org/en/download/).  **Choose the LTS (Long Term Support) version.**  This is the most stable version. Follow the installation instructions for your operating system.  Make sure to include npm in the installation (it's usually included by default).
-    *   **Verify Installation:** After installing Node.js, open a new terminal (command prompt on Windows, Terminal on macOS/Linux) and type:
-        ```bash
-        node -v
-        npm -v
-        ```
-        You should see version numbers for both Node.js and npm.  If you see an error, Node.js might not be installed correctly, or it might not be in your system's PATH.  (See Troubleshooting below).
+## 2. Installation
 
-*   **Git (or GitHub Desktop) (optional in most cases):**  We'll use Git to download the project code.  You have two options:
-    *   **Git:**  The command-line tool.  [Download Git](https://git-scm.com/downloads).  Choose the version for your operating system (Windows, macOS, Linux). Follow the installation instructions.
-    *   **GitHub Desktop:**  A graphical user interface for Git.  Easier for beginners!  [Download GitHub Desktop](https://desktop.github.com/).  Follow the installation instructions.
-
-## 2. Installation and Setup
-
-Now, let's get the project code and set it up:
-
-### Install with FLUJO (recommended)
-
-See [Integrating with FLUJO](https://github.com/mario-andreschak/mcp-abap-adt#4-integrating-with-flujo)
-
-### Install from npm
-
-The server is published on npm, so you don't need to clone or build anything. Most MCP clients can run it directly with `npx`:
+Most MCP clients run the server for you; you rarely start it by hand. Point your client at:
 
 ```bash
-npx -y mcp-abap-adt
+npx -y @janfrl/mcp-abap-adt
 ```
-
-You'll typically configure this inside your MCP client rather than run it by hand — point the client at the command `npx` with args `["-y", "mcp-abap-adt"]` and supply your SAP credentials as environment variables (`SAP_URL`, `SAP_USERNAME`, `SAP_PASSWORD`, `SAP_CLIENT`; optionally `SAP_LANGUAGE`, `TLS_REJECT_UNAUTHORIZED`). See the integration sections below for [](#4-integrating-with-) and [Cline](#5-integrating-with-cline).
 
 To install it globally instead:
 
 ```bash
-npm install -g mcp-abap-adt
+npm install -g @janfrl/mcp-abap-adt
 ```
 
-### Manual Installation (from source)
-1.  **Clone the Repository:**
-    *   **Using Git (command line):**
-        1.  Open a terminal (command prompt or Terminal).
-        2.  Navigate to the directory where you want to store the project.  For example, to put it on your Desktop:
-            ```bash
-            cd Desktop
-            ```
-        3.  Clone the repository:
-            ```bash
-            git clone https://github.com/mario-andreschak/mcp-abap-adt
-            ```
-        4.  Change into the project directory:
-            ```bash
-            cd mcp-abap-adt  # Or whatever the folder name is
-            ```
-    *   **Using GitHub Desktop:**
-        1.  Open GitHub Desktop.
-        2.  Click "File" -> "Clone Repository...".
-        3.  In the "URL" tab, paste the repository URL.
-        4.  Choose a local path (where you want to save the project on your computer).
-        5.  Click "Clone".
-
-2.  **Install Dependencies:**  This downloads all the necessary libraries the project needs.  In the terminal, inside the root directory, run:
-    ```bash
-    npm install
-    ```
-    This might take a few minutes.
-
-3.  **Build the Project:** This compiles the code into an executable format.
-    ```bash
-    npm run build
-    ```
-
-4.  **Create a `.env` file:** This file stores sensitive information like your SAP credentials.  It's *very* important to keep this file secure.
-    1.  In the root directory, create a new file named `.env` (no extension).
-    2.  Open the `.env` file in a text editor (like Notepad, VS Code, etc.).
-    3.  Add the following lines, replacing the placeholders with your actual SAP system information:
-        Important: If your password contains a "#" character, make sure to enclose your password in quotes!
-        ```
-        SAP_URL=https://your-sap-system.com:8000  # Your SAP system URL
-        SAP_USERNAME=your_username              # Your SAP username
-        SAP_PASSWORD=your_password              # Your SAP password
-        SAP_CLIENT=100                         # Your SAP client
-        ```
-        **Important:**  Never share your `.env` file with anyone, and never commit it to a Git repository!
-
-## 3. Running the Server
-
-To be fair, you usually dont usually "run" this server on it's own. It is supposed to be integrated into an MCP Client like Claude, FLUJO, Cline, etc. But you *can* manually run the server in two main ways:
-
-*   **Standalone Mode:**  This runs the server directly, and it will output messages to the terminal. The server will start and wait for client connections, so potentially rendering it useless except to see if it starts.
-*   **Development/Debug Mode:** This runs the server with the MCP Inspector. You can open the URL that it outputs in your browser and start playing around.
-
-### 3.1 Standalone Mode
-
-To run the server in standalone mode, use the following command in the terminal (from the root directory):
+### From source
 
 ```bash
-npm run start
+git clone https://github.com/janfrl/mcp-abap-adt
+cd mcp-abap-adt
+npm install
+npm run build
 ```
 
-You should see messages in the terminal indicating that the server is running.  It will listen for connections from MCP clients.  The server will keep running until you stop it (usually with Ctrl+C).
+Then point your client at `node` with the absolute path to `dist/index.js`.
 
-### 3.2 Development/Debug Mode (with Inspector)
+## 3. Configuring SAP systems
 
-This mode is useful for debugging.
+There are two ways to configure systems, and they can be combined.
 
-1.  **Start the server in debug mode:**
-    ```bash
-    npm run dev
-    ```
-    This will start the server and output a message like:  `🔍 MCP Inspector is up and running at http://localhost:5173 🚀`.
-    This is the URL you'll use to open the MCP inspector in your Browser.
+### Environment variables (single system)
 
-## 4. Integrating with 
+Setting all four of these gives you one system named `default`, which is what tool calls use when they don't name a system:
 
-[FLUJO](https://github.com/mario-andreschak/FLUJO) is the easiest way to use this server — no cloning, building, or editing JSON config. `mcp-abap-adt` is a curated Spotlight server, so it installs with a single click:
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `SAP_URL` | yes | Base URL, e.g. `https://sap.example.com:44300` |
+| `SAP_USERNAME` | yes | SAP user |
+| `SAP_PASSWORD` | yes | Password |
+| `SAP_CLIENT` | yes | Three digit client, e.g. `100` |
+| `SAP_LANGUAGE` | no | Logon language, e.g. `EN` |
+| `TLS_REJECT_UNAUTHORIZED` | no | `0` accepts self-signed certificates |
 
-1.  In FLUJO, navigate to **MCP**.
-2.  Click **Add Server**.
-3.  On the **Spotlight** tab, click **mcp-abap-adt** (or switch to the **Marketplace** tab and find it there).
-4.  FLUJO fetches the package automatically and opens the **Local Server** tab. Enter your SAP **URL**, **Username**, and **Password** (and client), then click **Save**.
+This is the setup 1.x used, and it keeps working unchanged.
 
-That's it — FLUJO downloads and runs the npm package for you.
+### Config file (any number of systems)
 
-### Streamable HTTP transport (via FLUJO)
+Create `mcp-abap-adt.config.jsonc` in the directory your MCP client starts the server in, or point at it explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work, as do `~/.config/mcp-abap-adt/` and `.mcp-abap-adtrc`.
 
-`mcp-abap-adt` runs over stdio. If you need to reach it over **streamable HTTP** — for example from another app on your machine or a client that only speaks HTTP — let FLUJO re-host it: install the server in FLUJO as above, then toggle **"Expose to external apps"** on the server. FLUJO's built-in mcp-proxy then serves it over HTTP at `http://localhost:4200/mcp-proxy/mcp-abap-adt`, and any HTTP-capable MCP client can connect with a config like:
-
-```json
+```jsonc
 {
-  "mcpServers": {
-    "mcp-abap-adt": {
-      "type": "http",
-      "url": "http://localhost:4200/mcp-proxy/mcp-abap-adt"
+  // Used when a tool call omits the "system" argument.
+  "defaultSystem": "dev",
+
+  // Adopt systems saved by the SAP Fiori tools VS Code extension.
+  "importFioriSystems": true,
+
+  "systems": {
+    "dev": {
+      "url": "https://dev.example.com:44300",
+      "client": "100",
+      "username": "DEVELOPER",
+      "keychain": true
+    },
+    "qas": {
+      "url": "https://qas.example.com:44300",
+      "client": "200",
+      "username": "DEVELOPER",
+      "passwordEnv": "SAP_QAS_PASSWORD"
+    },
+    "sandbox": {
+      "url": "https://vhcalnplci.dummy.nodomain:44300",
+      "client": "001",
+      "username": "DEVELOPER",
+      "keychain": true,
+      "allowSelfSigned": true,
+      "language": "EN"
     }
   }
 }
 ```
 
-FLUJO keeps your SAP credentials with the installed server, so the HTTP config itself carries none.
+Per-system options:
 
-## 5. Integrating with Cline
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `url` | required | Base URL of the system |
+| `client` | — | Three digit client. Omitted means the system default client. |
+| `language` | — | Logon language |
+| `username` | — | SAP user. May also come from the keychain entry. |
+| `keychain` | `false` | Read the password from the OS keychain |
+| `passwordEnv` | — | Name of an environment variable holding the password |
+| `password` | — | Plaintext password. Works, but warns on startup. |
+| `allowSelfSigned` | `false` | Accept untrusted certificates for this system |
+| `timeoutMs` | `30000` | Request timeout |
+| `authType` | `basic` | Only Basic authentication is implemented |
 
-Cline is a VS Code extension that uses MCP servers to provide language support. Here's how to connect this ABAP server to Cline:
+**Which system is the default?** In order: the `defaultSystem` you declared, then a system named `default` created from the `SAP_*` variables, then the only system if there is exactly one. Otherwise every tool call must name a system, and calls that don't get an error listing the valid names.
 
-1.  **Install Cline:** If you haven't already, install the "Cline" extension in VS Code.
+**Precedence.** A system written in the config file wins over one imported from the Fiori tools store with the same name, which in turn wins over the `SAP_*` variables.
 
-2.  **Open Cline Settings:**
-    *   Open the VS Code settings (File -> Preferences -> Settings, or Ctrl+,).
-    *   Search for "Cline MCP Settings".
-    *   Click "Edit in settings.json". This will open the `cline_mcp_settings.json` file.  The full path is usually something like: `C:\Users\username\AppData\Roaming\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` (replace `username` with your Windows username).
+Ask the model to call **`ListSystems`** at any time to see what the server actually resolved, including configuration problems. It returns no credentials.
 
-3.  **Add the Server Configuration:**  You'll need to add an entry to the `mcpServers` object in the `cline_mcp_settings.json` file.  The recommended way is to run the published npm package via `npx` and pass your SAP credentials as environment variables — no local build required:
+## 4. Credentials
 
-    ```json
-    {
-      "mcpServers": {
-        "mcp-abap-adt": {
-          "command": "npx",
-          "args": ["-y", "mcp-abap-adt"],
-          "env": {
-            "SAP_URL": "https://your-sap-system.com:8000",
-            "SAP_USERNAME": "your_username",
-            "SAP_PASSWORD": "your_password",
-            "SAP_CLIENT": "100"
-          },
-          "disabled": false,
-          "autoApprove": []
-        }
-        // ... other server configurations ...
-      }
-    }
-    ```
+The server looks for a password in this order and uses the first one that applies: `password`, then `passwordEnv`, then the keychain.
 
-    If you installed from source instead (see Manual Installation), point `command` at `node` with an absolute path to the build output, e.g. `"args": ["C:/PATH_TO/mcp-abap-adt/dist/index.js"]`, and configure credentials via the `.env` file.
+### OS keychain (recommended)
 
-4.  **Test the Connection:**
-    *   Cline should automatically connect to the server.  You will see the Server appear in the "MCP Servers" Panel (in the Cline extension, you'll find different buttons on the top.)
-    *   Ask Cline to get the Sourcecode of a program and it should mention the MCP Server and should try to use the corresponding tools
+Credentials live in the Windows Credential Manager, the macOS Keychain or libsecret — never in a file. The entries use the same naming as the SAP Fiori tools VS Code extension (service `fiori/v2/system`, account `<url>[/<client>]`), so the two tools share one entry.
 
-## 6. Integrating with Claude Desktop
+If you already saved a system in **SAP Fiori tools**, you are done: set `"importFioriSystems": true` and the server picks up the system *and* its password. Systems using an authentication type other than basic are skipped with an explanatory message.
 
-[Claude Desktop](https://claude.ai/download) can run this server directly via the published npm package.
+Otherwise store the password yourself:
 
-1.  Open Claude Desktop → **Settings** → **Developer** → **Edit Config**. This opens `claude_desktop_config.json`. The file lives at:
-    *   **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-    *   **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+```bash
+mcp-abap-adt store-credentials --system dev
+```
 
-2.  Add an `mcp-abap-adt` entry under `mcpServers`, filling in your SAP credentials:
+It asks for the username and a password that is not echoed. An entry that already exists is only replaced after you confirm, because it may be one the Fiori tools extension wrote.
 
-    ```json
-    {
-      "mcpServers": {
-        "mcp-abap-adt": {
-          "command": "npx",
-          "args": ["-y", "mcp-abap-adt"],
-          "env": {
-            "SAP_URL": "https://your-sap-system.com:8000",
-            "SAP_USERNAME": "your_username",
-            "SAP_PASSWORD": "your_password",
-            "SAP_CLIENT": "100"
-          }
-        }
-      }
-    }
-    ```
+### Environment variable
 
-3.  Save the file and **restart Claude Desktop**. The ABAP tools appear under the tools (🔨) menu.
+Name the variable in the config and let your MCP client provide it:
 
-> **Windows tip:** if `npx` isn't found, set `"command": "npx.cmd"`, or use the full path to `node` with the absolute path to `dist/index.js` from a source install.
+```jsonc
+{ "systems": { "qas": { "url": "...", "client": "200", "username": "DEVELOPER", "passwordEnv": "SAP_QAS_PASSWORD" } } }
+```
 
-## 7. Integrating with Claude Code
+### A note on OAuth
 
-[Claude Code](https://claude.com/claude-code) reads MCP servers from a `.mcp.json` file in your project root (shared with your team) or from user/project scope via the CLI.
+On-premise ADT does not accept OAuth bearer tokens. `/sap/bc/adt` is a plain ICF node, while OAuth scopes in AS ABAP are a Gateway/OData construct, so there is nothing to authenticate against. OAuth would only be possible against the BTP ABAP Environment, which this server does not support yet. For on-premise systems, the keychain is the way to keep passwords out of files.
 
-**Option A — `.mcp.json` in your project root:**
+## 5. Connecting an MCP client
+
+All clients follow the same shape. The examples show the simple single-system setup; to use several systems, drop the `env` block and add a config file instead.
+
+### Claude Code
+
+```bash
+claude mcp add mcp-abap-adt \
+  --env SAP_URL=https://sap.example.com:44300 \
+  --env SAP_USERNAME=your_username \
+  --env SAP_PASSWORD=your_password \
+  --env SAP_CLIENT=100 \
+  -- npx -y @janfrl/mcp-abap-adt
+```
+
+Or commit a `.mcp.json` in your project root. Because that file is shared, reference variables rather than writing secrets into it — Claude Code expands `${VAR}`:
 
 ```json
 {
   "mcpServers": {
     "mcp-abap-adt": {
       "command": "npx",
-      "args": ["-y", "mcp-abap-adt"],
+      "args": ["-y", "@janfrl/mcp-abap-adt", "--config", "./mcp-abap-adt.config.jsonc"],
+      "env": { "SAP_QAS_PASSWORD": "${SAP_QAS_PASSWORD}" }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+Settings → Developer → Edit Config, then add:
+
+```json
+{
+  "mcpServers": {
+    "mcp-abap-adt": {
+      "command": "npx",
+      "args": ["-y", "@janfrl/mcp-abap-adt"],
       "env": {
-        "SAP_URL": "https://your-sap-system.com:8000",
+        "SAP_URL": "https://sap.example.com:44300",
         "SAP_USERNAME": "your_username",
         "SAP_PASSWORD": "your_password",
         "SAP_CLIENT": "100"
@@ -260,75 +207,82 @@ Cline is a VS Code extension that uses MCP servers to provide language support. 
 }
 ```
 
-Because this file is committed to your repo, avoid putting real passwords in it — either use placeholder values that each developer fills in locally, or reference environment variables (Claude Code expands `${VAR}` in `.mcp.json`), e.g. `"SAP_PASSWORD": "${SAP_PASSWORD}"`.
+Restart Claude Desktop afterwards. On Windows, use `"command": "npx.cmd"` if `npx` is not found.
 
-**Option B — add it from the CLI:**
+### Cline
+
+Same JSON, in `cline_mcp_settings.json` (VS Code settings → "Cline MCP Settings" → Edit in settings.json).
+
+Since Cline runs inside VS Code, this is where sharing credentials with SAP Fiori tools pays off: save the system once in Fiori tools, then use a config file with `"importFioriSystems": true` and no `env` block at all.
+
+## 6. Available tools
+
+Every tool below takes an optional **`system`** argument naming a configured system. Omit it to use the default.
+
+| Tool | Description | Arguments |
+| --- | --- | --- |
+| `ListSystems` | List configured systems, the default, and configuration problems. Returns no credentials. | — |
+| `GetProgram` | ABAP program source | `program_name` |
+| `GetClass` | ABAP class source | `class_name` |
+| `GetInterface` | ABAP interface source | `interface_name` |
+| `GetFunctionGroup` | Function group source | `function_group` |
+| `GetFunction` | Function module source | `function_name`, `function_group` |
+| `GetInclude` | Include source | `include_name` |
+| `GetStructure` | DDIC structure | `structure_name` |
+| `GetTable` | Table structure | `table_name` |
+| `GetTableContents` | Table contents | `table_name`, `max_rows` (default 100) |
+| `GetPackage` | Package contents | `package_name` |
+| `GetTypeInfo` | Domain or data element | `type_name` |
+| `GetCDSView` | CDS view (DDL source) | `cds_view_name` |
+| `GetTransaction` | Transaction details | `transaction_name` |
+| `SearchObject` | Quick search across objects | `query`, `maxResults` (default 100) |
+| `GetBehaviorDefinition` | RAP behavior definition (needs ~NW 7.54 / S/4HANA) | `behavior_definition_name` |
+| `GetServiceDefinition` | RAP service definition (needs ~NW 7.54 / S/4HANA) | `service_definition_name` |
+
+## 7. Troubleshooting
+
+**Start with `ListSystems`.** It reports every configuration problem the server found, and it works even when nothing is configured correctly.
+
+**"TLS certificate verification failed"** — the system uses a self-signed or internally issued certificate. Add `"allowSelfSigned": true` to that system, or set `TLS_REJECT_UNAUTHORIZED=0` if you configure through environment variables. Version 1.x disabled verification for everyone; 2.x makes it a per-system decision.
+
+**"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
+
+**"No system was given and no default system is configured"** — you have more than one system and no `defaultSystem`. Either set one or pass `system` in the call.
+
+**SAP returns 401 or 403** — check the user and client, and that the user may use ADT. Some ADT endpoints need `S_DEVELOP` authorizations.
+
+**Nothing works and you want to see the traffic** — set `MCP_ABAP_ADT_DEBUG=1` for extra stderr diagnostics, or run the inspector:
 
 ```bash
-claude mcp add mcp-abap-adt \
-  --env SAP_URL=https://your-sap-system.com:8000 \
-  --env SAP_USERNAME=your_username \
-  --env SAP_PASSWORD=your_password \
-  --env SAP_CLIENT=100 \
-  -- npx -y mcp-abap-adt
+npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
-Add `--scope project` to write it to the shared `.mcp.json`, or `--scope user` to make it available across all your projects. Verify with `claude mcp list`.
+## 8. Upgrading from 1.x
 
-## 8. Troubleshooting
+- **Node.js 22 or newer is required**, and the package is now ESM-only.
+- **TLS certificates are verified.** 1.x passed `rejectUnauthorized: false` unconditionally and ignored the documented `TLS_REJECT_UNAUTHORIZED` variable. Systems with self-signed certificates need `"allowSelfSigned": true` or `TLS_REJECT_UNAUTHORIZED=0`.
+- **`SAP_LANGUAGE` now actually works.** It was documented but never read, so requests that used to run in the user's default language may now run in the language you configured.
+- **The package name changed** to `@janfrl/mcp-abap-adt`; the command stays `mcp-abap-adt`.
+- Existing `SAP_*` environment configurations keep working and become the system named `default`.
 
-*   **`node -v` or `npm -v` gives an error:**
-    *   Make sure Node.js is installed correctly. First try closing the Terminal/Powershell/cmd.exe in which you were executing the command. Try restarting your computer. Try reinstalling it.
-    *   Ensure that the Node.js installation directory is in your system's PATH environment variable.  On Windows, you can edit environment variables through the System Properties (search for "environment variables" in the Start Menu).
-*   **`npm install` fails:**
-    *   Make sure you have an internet connection.
-    *   Try deleting the `node_modules` folder and running `npm install` again.
-    *   If you're behind a proxy, you might need to configure npm to use the proxy.  Search online for "npm proxy settings".
-*   **Cline doesn't connect to the server:**
-    *   Double-check the settings in `cline_mcp_settings.json`.  It *must* be the correct, absolute path to the `root-server` directory, and use double backslashes on Windows.
-    *   Make sure the server is running (use `npm run start` to check).
-    *   Restart VS Code.
-    *   Alternatively: 
-    *   Navigate to the root folder of mcp-abap-adt in your Explorer, Shift+Right-Click and select "Open Powershell here". (Or open a Powershell and navigate to the folder using `cd C:/PATH_TO/mcp-abap-adt/`
-    *   Run "npm install"
-    *   Run "npm run build"
-    *   Run "npx @modelcontextprotocol/inspector node dist/index.js"
-    *   Open your browser at the URL it outputs. Click "connect" on the left side.
-    *   Click "Tools" on the top, then click "List Tools"
-    *   Click GetProgram and enter "SAPMV45A" or any other Report name as Program Name on the right
-    *   Test and see what the output is
-*   **SAP connection errors:**
-    *   Verify your SAP credentials in the `.env` file.
-    *   Ensure that the SAP system is running and accessible from your network.
-    *   Make sure that your SAP user has the necessary authorizations to access the ADT services.
-    *   Check that the required ADT services are activated in transaction `SICF`.
-    *   If you're using self-signed certificates or there is an issue with your SAP systems http config, make sure to set TLS_REJECT_UNAUTHORIZED as described above!
+## 9. Development
 
-## 9. Available Tools
+```bash
+npm install
+npm run build        # compile to dist/
+npm test             # unit tests, no SAP system needed
+npm run typecheck
+```
 
-This server provides the following tools, which can be used through FLUJO, Cline, Claude Desktop, Claude Code, or any other MCP client:
+The unit tests mock HTTP and the keychain, so they run anywhere. The integration suite talks to a real system and is opt-in:
 
-| Tool Name           | Description                                       | Input Parameters                                                   | Example Usage (in Cline)                                   |
-| ------------------- | ------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
-| `GetProgram`        | Retrieve ABAP program source code.                | `program_name` (string): Name of the ABAP program.                 | `@tool GetProgram program_name=ZMY_PROGRAM`                |
-| `GetClass`          | Retrieve ABAP class source code.                  | `class_name` (string): Name of the ABAP class.                     | `@tool GetClass class_name=ZCL_MY_CLASS`                   |
-| `GetFunctionGroup`  | Retrieve ABAP Function Group source code.         | `function_group` (string): Name of the function group              | `@tool GetFunctionGroup function_group=ZMY_FUNCTION_GROUP` |
-| `GetFunction`       | Retrieve ABAP Function Module source code.        | `function_name` (string), `function_group` (string)                | `@tool GetFunction function_name=ZMY_FUNCTION function_group=ZFG`|
-| `GetStructure`      | Retrieve ABAP Structure.                          | `structure_name` (string): Name of the DDIC Structure.             | `@tool GetStructure structure_name=ZMY_STRUCT`             |
-| `GetTable`          | Retrieve ABAP table structure.                    | `table_name` (string): Name of the ABAP DB table.                  | `@tool GetTable table_name=ZMY_TABLE`                      |
-| `GetTableContents`  | Retrieve contents of an ABAP table.               | `table_name` (string), `max_rows` (number, optional, default 100)  | `@tool GetTableContents table_name=ZMY_TABLE max_rows=50`  |
-| `GetCDSView`        | Retrieve CDS view (DDL source) source code.       | `cds_view_name` (string): Name of the CDS view (DDL source name).  | `@tool GetCDSView cds_view_name=I_CURRENCY`                |
-| `GetPackage`        | Retrieve ABAP package details.                    | `package_name` (string): Name of the ABAP package.                 | `@tool GetPackage package_name=ZMY_PACKAGE`                |
-| `GetTypeInfo`       | Retrieve ABAP type information.                   | `type_name` (string): Name of the ABAP type.                       | `@tool GetTypeInfo type_name=ZMY_TYPE`                     |
-| `GetInclude`        | Retrieve ABAP include source code                 | `include_name` (string): name of the ABAP include`                 | `@tool GetInclude include_name=ZMY_INCLUDE`                |
-| `SearchObject`      | Search for ABAP objects using quick search.       | `query` (string), `maxResults` (number, optional, default 100)     | `@tool SearchObject query=ZMY* maxResults=20`              |
-| `GetInterface`      | Retrieve ABAP interface source code.              | `interface_name` (string): Name of the ABAP interface.             | `@tool GetInterface interface_name=ZIF_MY_INTERFACE`       |
-| `GetTransaction`    | Retrieve ABAP transaction details.                | `transaction_name` (string): Name of the ABAP transaction.         | `@tool GetTransaction transaction_name=ZMY_TRANSACTION`    |
-| `GetBehaviorDefinition` | Retrieve RAP Behavior Definition (BDEF) source. Requires ~NW 7.54 / S/4HANA. | `behavior_definition_name` (string): Name of the RAP Behavior Definition. | `@tool GetBehaviorDefinition behavior_definition_name=ZMY_ENTITY` |
-| `GetServiceDefinition`  | Retrieve RAP Service Definition (SRVD) source. Requires ~NW 7.54 / S/4HANA.  | `service_definition_name` (string): Name of the RAP Service Definition.   | `@tool GetServiceDefinition service_definition_name=ZMY_SERVICE`  |
+```bash
+RUN_INTEGRATION=1 npm test               # bash
+$env:RUN_INTEGRATION='1'; npm test       # PowerShell
+```
 
+Set `INTEGRATION_SYSTEM` to target a specific configured system.
 
+## License
 
-<a href="https://glama.ai/mcp/servers/gwkh12xlu7">
-  <img width="380" height="200" src="https://glama.ai/mcp/servers/gwkh12xlu7/badge" alt="ABAP ADT MCP server" />
-</a>
+MIT. Originally created by [mario-andreschak](https://github.com/mario-andreschak/mcp-abap-adt).

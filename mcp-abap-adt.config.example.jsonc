@@ -1,0 +1,44 @@
+// Copy to mcp-abap-adt.config.jsonc and adjust.
+// The server also accepts .json, .yaml, .toml and .ts, ~/.config/mcp-abap-adt/,
+// and an explicit path via --config or MCP_ABAP_ADT_CONFIG.
+{
+  // Used when a tool call omits the "system" argument. Without it, calls must
+  // name a system unless exactly one is configured.
+  "defaultSystem": "dev",
+
+  // Adopt systems saved by the SAP Fiori tools VS Code extension, including
+  // their keychain passwords. Systems using anything other than basic
+  // authentication are skipped with an explanation in ListSystems.
+  "importFioriSystems": false,
+
+  "systems": {
+    // Password from the OS keychain. Store it once with:
+    //   mcp-abap-adt store-credentials --system dev
+    "dev": {
+      "url": "https://dev.example.com:44300",
+      "client": "100",
+      "username": "DEVELOPER",
+      "keychain": true
+    },
+
+    // Password from an environment variable, e.g. supplied by the MCP client.
+    "qas": {
+      "url": "https://qas.example.com:44300",
+      "client": "200",
+      "username": "DEVELOPER",
+      "passwordEnv": "SAP_QAS_PASSWORD"
+    },
+
+    // A system with an internally issued certificate. Certificates are
+    // verified unless a system opts out here.
+    "sandbox": {
+      "url": "https://vhcalnplci.dummy.nodomain:44300",
+      "client": "001",
+      "username": "DEVELOPER",
+      "language": "EN",
+      "keychain": true,
+      "allowSelfSigned": true,
+      "timeoutMs": 60000
+    }
+  }
+}

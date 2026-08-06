@@ -1,24 +1,24 @@
 # Build and run the mcp-abap-adt MCP server in a container.
-FROM node:18-alpine
+# The server speaks MCP over stdio, so nothing is exposed on a port; run it
+# with `docker run -i` and mount a config file if you use one:
+#   docker run -i --rm \
+#     -v ./mcp-abap-adt.config.jsonc:/app/mcp-abap-adt.config.jsonc \
+#     mcp-abap-adt
+# The OS keychain is not available inside a container, so configure
+# credentials with passwordEnv or the SAP_* variables.
 
-# Set the working directory
+FROM node:22-alpine AS build
 WORKDIR /app
-
-# Copy package.json
-COPY package.json ./
-
-# Install dependencies
-RUN npm install -r
-
-
-# Copy the rest of the application code
-COPY . .
-
-# Build the TypeScript application
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
 RUN npm run build
 
-# Expose the port the app runs on
-EXPOSE 5173
-
-# Start the application
+FROM node:22-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
 CMD ["node", "./dist/index.js"]
