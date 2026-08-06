@@ -10,6 +10,14 @@ build/
 .env.local
 .env.*.local
 
+# Local SAP system configuration; the .example file is committed
+mcp-abap-adt.config.*
+!mcp-abap-adt.config.example.jsonc
+.mcp-abap-adtrc
+
+# Scratch files
+.smoke.mjs
+
 # Logs
 logs
 *.log
