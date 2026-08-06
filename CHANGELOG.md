@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - 2026-08-06
 
 First release of the [janfrl](https://github.com/janfrl/mcp-abap-adt) fork,
-published as `@janfrl/mcp-abap-adt`.
+published as `@janfr/mcp-abap-adt`.
 
 ### Added
 - Support for several SAP systems at once. Systems are named in a config file

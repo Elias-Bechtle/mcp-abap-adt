@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@janfrl/mcp-abap-adt",
+      "identifier": "@janfr/mcp-abap-adt",
       "version": "2.0.0",
       "transport": {
         "type": "stdio"

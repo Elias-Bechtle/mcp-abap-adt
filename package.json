@@ -1,5 +1,5 @@
 {
-  "name": "@janfrl/mcp-abap-adt",
+  "name": "@janfr/mcp-abap-adt",
   "version": "2.0.0",
   "mcpName": "io.github.janfrl/mcp-abap-adt",
   "type": "module",

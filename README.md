@@ -30,13 +30,13 @@ This is a fork of [mario-andreschak/mcp-abap-adt](https://github.com/mario-andre
 Most MCP clients run the server for you; you rarely start it by hand. Point your client at:
 
 ```bash
-npx -y @janfrl/mcp-abap-adt
+npx -y @janfr/mcp-abap-adt
 ```
 
 To install it globally instead:
 
 ```bash
-npm install -g @janfrl/mcp-abap-adt
+npm install -g @janfr/mcp-abap-adt
 ```
 
 ### From source
@@ -189,7 +189,7 @@ claude mcp add mcp-abap-adt \
   --env SAP_USERNAME=your_username \
   --env SAP_PASSWORD=your_password \
   --env SAP_CLIENT=100 \
-  -- npx -y @janfrl/mcp-abap-adt
+  -- npx -y @janfr/mcp-abap-adt
 ```
 
 Or commit a `.mcp.json` in your project root. Because that file is shared, reference variables rather than writing secrets into it — Claude Code expands `${VAR}`:
@@ -199,7 +199,7 @@ Or commit a `.mcp.json` in your project root. Because that file is shared, refer
   "mcpServers": {
     "mcp-abap-adt": {
       "command": "npx",
-      "args": ["-y", "@janfrl/mcp-abap-adt", "--config", "./mcp-abap-adt.config.jsonc"],
+      "args": ["-y", "@janfr/mcp-abap-adt", "--config", "./mcp-abap-adt.config.jsonc"],
       "env": { "SAP_QAS_PASSWORD": "${SAP_QAS_PASSWORD}" }
     }
   }
@@ -215,7 +215,7 @@ Settings → Developer → Edit Config, then add:
   "mcpServers": {
     "mcp-abap-adt": {
       "command": "npx",
-      "args": ["-y", "@janfrl/mcp-abap-adt"],
+      "args": ["-y", "@janfr/mcp-abap-adt"],
       "env": {
         "SAP_URL": "https://sap.example.com:44300",
         "SAP_USERNAME": "your_username",
@@ -327,7 +327,7 @@ Point your MCP client at the new package name. Everything else can stay as it is
      "mcp-abap-adt": {
        "command": "npx",
 -      "args": ["-y", "mcp-abap-adt"],
-+      "args": ["-y", "@janfrl/mcp-abap-adt"],
++      "args": ["-y", "@janfr/mcp-abap-adt"],
        "env": {
          "SAP_URL": "https://sap.example.com:44300",
          "SAP_USERNAME": "your_username",
@@ -347,7 +347,7 @@ Your four `SAP_*` variables continue to work and now describe a system named `de
 | --- | --- | --- |
 | Certificates are verified | `TLS certificate verification failed ... (SELF_SIGNED_CERT_IN_CHAIN)` on the first tool call | Add `SAP_ALLOW_SELF_SIGNED=true` to the `env` block, or `"allowSelfSigned": true` to the system in a config file |
 | Node.js 22 or newer required | The server fails to start | Update Node.js; the package is also ESM-only now |
-| Package renamed | The old name keeps installing the original project | Use `@janfrl/mcp-abap-adt` |
+| Package renamed | The old name keeps installing the original project | Use `@janfr/mcp-abap-adt` |
 | `SAP_LANGUAGE` is honoured | ABAP texts arrive in a different language than before | Remove the variable, or set it to the language you want |
 
 The certificate change is the one that will actually bite you. Version 1.2.0 passed `rejectUnauthorized: false` on every request and never read the `TLS_REJECT_UNAUTHORIZED` variable it documented, so **no** certificate was ever checked. Verification is now on by default and can be switched off per system.
