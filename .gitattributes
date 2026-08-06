@@ -1,0 +1,17 @@
+# Check out text files with LF on every platform.
+#
+# Without this, Git's core.autocrlf=true (the default on Windows, including the
+# GitHub Windows runners) rewrites every file to CRLF on checkout. oxfmt writes
+# and expects LF and has no "auto" mode, so the format check then fails on all
+# files on Windows while passing on Linux.
+* text=auto eol=lf
+
+# Never touch binaries, whatever the content sniffing thinks.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.node binary
+*.tgz binary
