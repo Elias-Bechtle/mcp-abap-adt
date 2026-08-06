@@ -71,6 +71,8 @@ Every `SAP_*` variable sets one field of the system named `default`, and each ha
 
 > `TLS_REJECT_UNAUTHORIZED=0` from earlier versions still works and means the same as `SAP_ALLOW_SELF_SIGNED=true`, but it prints a deprecation warning. The old name is inverted (`0` means "allow") and looks like Node's `NODE_TLS_REJECT_UNAUTHORIZED`, which it is not.
 
+The variables can come from your MCP client's `env` block or from a `.env` file. Two locations are read: the directory the server is started in, and the package's own directory (where earlier versions kept it). A variable that is already set in the real environment wins over any `.env` file.
+
 ### Config file (any number of systems)
 
 Create `mcp-abap-adt.config.jsonc` in the directory your MCP client starts the server in, or point at it explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work, as do `~/.config/mcp-abap-adt/` and `.mcp-abap-adtrc`.
