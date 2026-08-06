@@ -7,32 +7,39 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
-import path from 'path';
-import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Import handler functions
-import { handleGetProgram } from './handlers/handleGetProgram';
-import { handleGetClass } from './handlers/handleGetClass';
-import { handleGetFunctionGroup } from './handlers/handleGetFunctionGroup';
-import { handleGetFunction } from './handlers/handleGetFunction';
-import { handleGetTable } from './handlers/handleGetTable';
-import { handleGetStructure } from './handlers/handleGetStructure';
-import { handleGetTableContents } from './handlers/handleGetTableContents';
-import { handleGetPackage } from './handlers/handleGetPackage';
-import { handleGetInclude } from './handlers/handleGetInclude';
-import { handleGetTypeInfo } from './handlers/handleGetTypeInfo';
-import { handleGetInterface } from './handlers/handleGetInterface';
-import { handleGetTransaction } from './handlers/handleGetTransaction';
-import { handleSearchObject } from './handlers/handleSearchObject';
-import { handleGetCDSView } from './handlers/handleGetCDSView';
-import { handleGetBehaviorDefinition } from './handlers/handleGetBehaviorDefinition';
-import { handleGetServiceDefinition } from './handlers/handleGetServiceDefinition';
+import { handleGetProgram } from './handlers/handleGetProgram.js';
+import { handleGetClass } from './handlers/handleGetClass.js';
+import { handleGetFunctionGroup } from './handlers/handleGetFunctionGroup.js';
+import { handleGetFunction } from './handlers/handleGetFunction.js';
+import { handleGetTable } from './handlers/handleGetTable.js';
+import { handleGetStructure } from './handlers/handleGetStructure.js';
+import { handleGetTableContents } from './handlers/handleGetTableContents.js';
+import { handleGetPackage } from './handlers/handleGetPackage.js';
+import { handleGetInclude } from './handlers/handleGetInclude.js';
+import { handleGetTypeInfo } from './handlers/handleGetTypeInfo.js';
+import { handleGetInterface } from './handlers/handleGetInterface.js';
+import { handleGetTransaction } from './handlers/handleGetTransaction.js';
+import { handleSearchObject } from './handlers/handleSearchObject.js';
+import { handleGetCDSView } from './handlers/handleGetCDSView.js';
+import { handleGetBehaviorDefinition } from './handlers/handleGetBehaviorDefinition.js';
+import { handleGetServiceDefinition } from './handlers/handleGetServiceDefinition.js';
 
 // Import shared utility functions and types
-import { getBaseUrl, getAuthHeaders, createAxiosInstance, makeAdtRequest, return_error, return_response } from './lib/utils';
+import { getBaseUrl, getAuthHeaders, createAxiosInstance, makeAdtRequest, return_error, return_response } from './lib/utils.js';
 
-// Load environment variables from .env file
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load environment variables from the .env file next to the installed package.
+// loadEnvFile throws when the file is absent, which is a perfectly normal setup
+// (MCP clients usually pass the variables through their own `env` block).
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+try {
+  process.loadEnvFile(path.join(packageRoot, '.env'));
+} catch {
+  // no .env file — rely on the ambient environment
+}
 
 // Interface for SAP configuration
 export interface SapConfig {
@@ -405,8 +412,14 @@ export class mcp_abap_adt_server {
   }
 }
 
-// Create and run the server
-const server = new mcp_abap_adt_server();
-server.run().catch((error) => {
-  process.exit(1);
-});
+// Only bootstrap when started as a program. Importing this module (from tests or
+// tooling) must not spawn a stdio server or read the SAP configuration.
+const isEntryPoint =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntryPoint) {
+  const server = new mcp_abap_adt_server();
+  server.run().catch(() => {
+    process.exit(1);
+  });
+}

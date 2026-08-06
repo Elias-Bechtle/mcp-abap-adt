@@ -1,5 +1,5 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils';
+import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
+import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
 import convert from 'xml-js';
 
 export async function handleGetPackage(args: any) {
@@ -17,7 +17,9 @@ export async function handleGetPackage(args: any) {
         };
 
         const package_structure_response = await makeAdtRequest(nodeContentsUrl, 'POST', 30000, undefined, nodeContentsParams);
-        const result = convert.xml2js(package_structure_response.data, {compact: true});
+        // xml2js is typed as Element | ElementCompact; the compact form is a plain
+        // object tree that only makes sense to index dynamically.
+        const result = convert.xml2js(package_structure_response.data, {compact: true}) as any;
         
         const nodes = result["asx:abap"]?.["asx:values"]?.DATA?.TREE_CONTENT?.SEU_ADT_REPOSITORY_OBJ_NODE || [];
         const extractedData = (Array.isArray(nodes) ? nodes : [nodes]).filter(node => 

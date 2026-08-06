@@ -2,7 +2,7 @@ import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import axios, { AxiosError, AxiosInstance } from 'axios';
 import { Agent } from 'https';
 import { AxiosResponse } from 'axios';
-import { getConfig, SapConfig } from '../index'; // getConfig needs to be exported from index.ts
+import { getConfig, SapConfig } from '../index.js'; // getConfig needs to be exported from index.ts
 
 export { McpError, ErrorCode, AxiosResponse };
 

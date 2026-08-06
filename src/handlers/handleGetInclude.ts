@@ -1,5 +1,5 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils';
+import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
+import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
 
 export async function handleGetInclude(args: any) {
     try {

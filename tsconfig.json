@@ -1,20 +1,18 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "lib": ["es2022"],
+    "target": "es2023",
+    "lib": ["es2023"],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "rootDir": "./src",
+    "outDir": "./dist",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules/@modelcontextprotocol/sdk/types"
-    ],
-    "outDir": "./dist",
-    "noImplicitAny": false
+    "sourceMap": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "dist", "tests", "**/*.test.ts"]
 }

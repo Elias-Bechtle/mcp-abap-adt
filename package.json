@@ -2,18 +2,29 @@
   "name": "@janfrl/mcp-abap-adt",
   "version": "1.2.0",
   "mcpName": "io.github.janfrl/mcp-abap-adt",
+  "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
   "bin": {
     "mcp-abap-adt": "dist/index.js"
   },
   "files": [
     "dist"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "jest",
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --dir tests/integration",
     "start": "node ./dist/index.js",
-    "dev": "npx @modelcontextprotocol/inspector node ./dist/index.js"
+    "dev": "npx @modelcontextprotocol/inspector node ./dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "abap",
@@ -40,14 +51,18 @@
     "url": "https://github.com/janfrl/mcp-abap-adt/issues"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@zowe/secrets-for-zowe-sdk": "^8.33.4",
     "axios": "^1.18.1",
-    "dotenv": "^16.4.7",
+    "c12": "^3.3.4",
+    "ofetch": "^1.5.1",
+    "undici": "^8.10.0",
     "xml-js": "^1.6.11",
-    "typescript": "^5.7.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
     "@types/node": "^22.10.10",
-    "@types/jest": "^29.5.14",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5"    
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   }
 }
