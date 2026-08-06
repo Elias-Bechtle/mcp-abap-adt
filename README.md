@@ -75,7 +75,9 @@ The variables can come from your MCP client's `env` block or from a `.env` file.
 
 ### Config file (any number of systems)
 
-Create `mcp-abap-adt.config.jsonc` in the directory your MCP client starts the server in, or point at it explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work, as do `~/.config/mcp-abap-adt/` and `.mcp-abap-adtrc`.
+Point at the file explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work.
+
+Without an explicit path, the file is looked up as `mcp-abap-adt.config.*` in the **working directory the server is started in**. MCP clients rarely start it where you expect, so an absolute path via `--config` is the reliable choice; there is no lookup in your home directory.
 
 ```jsonc
 {
