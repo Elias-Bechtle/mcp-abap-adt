@@ -18,6 +18,7 @@ export async function handleGetServiceDefinition(
       if (isHttpStatus(error, 404)) {
         throw new Error(
           `Service Definition '${args.service_definition_name}' not found, or the RAP service-definition endpoint is not available on this system (requires ~NW 7.54 / S/4HANA with the RAP stack).`,
+          { cause: error },
         );
       }
       throw error;

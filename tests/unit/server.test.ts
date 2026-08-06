@@ -37,9 +37,9 @@ describe('tool surface', () => {
     const client = await connectClient(singleSystem);
 
     const { tools } = await client.listTools();
-    const names = tools.map((tool) => tool.name).sort();
+    const names = tools.map((tool) => tool.name).toSorted();
 
-    expect(names).toEqual([...TOOL_DEFINITIONS.map((tool) => tool.name), 'ListSystems'].sort());
+    expect(names).toEqual([...TOOL_DEFINITIONS.map((tool) => tool.name), 'ListSystems'].toSorted());
     expect(tools).toHaveLength(17);
   });
 

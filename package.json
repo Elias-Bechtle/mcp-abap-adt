@@ -25,7 +25,11 @@
     "start": "node ./dist/index.js",
     "dev": "npx @modelcontextprotocol/inspector node ./dist/index.js",
     "prepublishOnly": "npm run build",
-    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "lint": "oxlint --type-aware src tests",
+    "lint:fix": "oxlint --type-aware --fix src tests",
+    "fmt": "oxfmt src tests vitest.config.ts",
+    "fmt:check": "oxfmt --check src tests vitest.config.ts"
   },
   "keywords": [
     "abap",
@@ -62,6 +66,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.10",
+    "oxfmt": "^0.62.0",
+    "oxlint": "^1.77.0",
+    "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   }

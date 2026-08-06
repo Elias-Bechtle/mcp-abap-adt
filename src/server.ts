@@ -46,7 +46,7 @@ function defineTool<Shape extends z.ZodRawShape>(
   inputSchema: Shape,
   handler: (connection: SapConnection, args: z.infer<z.ZodObject<Shape>>) => Promise<ToolResult>,
 ): ToolDefinition {
-  return { name, description, inputSchema, handler: handler as ToolDefinition['handler'] };
+  return { name, description, inputSchema, handler };
 }
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [

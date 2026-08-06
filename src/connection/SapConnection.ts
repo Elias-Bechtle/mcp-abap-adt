@@ -30,6 +30,20 @@ export interface SapConnectionDeps {
   providers?: CredentialProvider[];
 }
 
+/**
+ * ADT error bodies are XML or plain text. Anything else would stringify to
+ * "[object Object]", which tells the reader nothing.
+ */
+function stringifyBody(body: unknown): string {
+  if (typeof body === 'string') return body;
+  if (body === null || body === undefined) return '';
+  try {
+    return JSON.stringify(body) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 interface ExecuteOptions {
   method: 'GET' | 'POST' | 'PUT';
   extraHeaders?: Record<string, string>;
@@ -128,6 +142,7 @@ export class SapConnection {
       }
       throw new Error(
         `Could not obtain a CSRF token for system "${this.name}": ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
     }
   }
@@ -157,7 +172,7 @@ export class SapConnection {
         responseType: 'text',
         retry: 0,
         timeout: options.timeoutMs ?? this.config.timeoutMs,
-        dispatcher: this.#agent as never,
+        dispatcher: this.#agent,
       });
       this.#storeCookies(response.headers);
       return { status: response.status, headers: response.headers, data: response._data ?? '' };
@@ -187,12 +202,7 @@ export class SapConnection {
       // Error responses carry cookies and CSRF tokens worth keeping.
       this.#storeCookies(response.headers);
       const body = (error as { data?: unknown }).data ?? response._data;
-      return new AdtHttpError(
-        response.status,
-        typeof body === 'string' ? body : body == null ? '' : String(body),
-        `${this.baseUrl}${path}`,
-        response.headers,
-      );
+      return new AdtHttpError(response.status, stringifyBody(body), `${this.baseUrl}${path}`, response.headers);
     }
     return error instanceof Error ? error : new Error(String(error));
   }

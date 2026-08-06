@@ -83,9 +83,14 @@ export async function discoverFioriSystems(home: string = homedir()): Promise<Fi
   const errors: ConfigError[] = [];
   const sources: string[] = [];
 
-  for (const dir of STORE_DIRECTORIES) {
-    const path = join(home, dir, STORE_FILE);
-    const entries = await readStoreFile(path);
+  const stores = await Promise.all(
+    STORE_DIRECTORIES.map(async (dir) => {
+      const path = join(home, dir, STORE_FILE);
+      return { path, entries: await readStoreFile(path) };
+    }),
+  );
+
+  for (const { path, entries } of stores) {
     if (!entries) continue;
     sources.push(path);
 

@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "node"],
+  // "pedantic" is deliberately off: on a test suite it mostly reports
+  // max-lines-per-function for describe blocks and require-await for mocks.
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
+  },
+  "env": {
+    "builtin": true,
+    "node": true,
+    "es2024": true
+  },
+  "ignorePatterns": ["dist"],
+  "rules": {
+    // ADT answers with untyped XML trees that only make sense to index
+    // dynamically; the handlers narrow them by hand.
+    "typescript/no-explicit-any": "off",
+    // Used only directly after a canResolve() guard has proven the field set.
+    "typescript/no-non-null-assertion": "off",
+    // _data and _text are property names ofetch and xml-js define, not ours.
+    "no-underscore-dangle": ["error", { "allow": ["_data", "_text"] }],
+    // Type-aware, but too strict here: this code bridges the type systems of
+    // undici, ofetch and the MCP SDK, where deliberate casts are the seam.
+    "typescript/no-unsafe-type-assertion": "off"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "unicorn/no-null": "off",
+        // Passing a vi.fn() to expect() is exactly what this rule mistakes for
+        // an unbound method; there is no `this` involved.
+        "typescript/unbound-method": "off"
+      }
+    }
+  ]
+}

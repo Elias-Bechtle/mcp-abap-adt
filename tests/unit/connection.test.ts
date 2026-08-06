@@ -39,7 +39,7 @@ function fakeFetch(responder: (call: RecordedCall, index: number) => FakeRespons
 
     const call: RecordedCall = {
       url: new URL(rawUrl),
-      method: String(init.method ?? 'GET'),
+      method: typeof init.method === 'string' ? init.method : 'GET',
       headers,
       body: typeof init.body === 'string' ? init.body : undefined,
     };
@@ -204,17 +204,17 @@ describe('error mapping', () => {
   });
 });
 
-describe('ConnectionRegistry', () => {
-  function registryFor(systems: Record<string, SystemConfig>, defaultSystem?: string, fetchImpl?: typeof fetch) {
-    const config: ResolvedAppConfig = {
-      defaultSystem,
-      systems: new Map(Object.entries(systems)),
-      errors: [],
-      sources: [],
-    };
-    return new ConnectionRegistry(config, { fetch: fetchImpl, providers: [createInlineProvider()] });
-  }
+function registryFor(systems: Record<string, SystemConfig>, defaultSystem?: string, fetchImpl?: typeof fetch) {
+  const config: ResolvedAppConfig = {
+    defaultSystem,
+    systems: new Map(Object.entries(systems)),
+    errors: [],
+    sources: [],
+  };
+  return new ConnectionRegistry(config, { fetch: fetchImpl, providers: [createInlineProvider()] });
+}
 
+describe('ConnectionRegistry', () => {
   it('reuses one connection per system', () => {
     const registry = registryFor({ dev: system() }, 'dev');
 

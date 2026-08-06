@@ -103,7 +103,7 @@ describe('config file', () => {
     const config = await load();
 
     expect(config.errors).toEqual([]);
-    expect([...config.systems.keys()].sort()).toEqual(['dev', 'prd']);
+    expect([...config.systems.keys()].toSorted()).toEqual(['dev', 'prd']);
     expect(config.defaultSystem).toBe('dev');
   });
 
@@ -111,7 +111,7 @@ describe('config file', () => {
     const path = await writeConfig(twoSystems);
     const config = await loadAppConfig({ cwd: homeDir, homeDir, env: {}, configFile: path });
 
-    expect([...config.systems.keys()].sort()).toEqual(['dev', 'prd']);
+    expect([...config.systems.keys()].toSorted()).toEqual(['dev', 'prd']);
   });
 
   it('keeps the healthy systems when one entry is malformed', async () => {
@@ -149,7 +149,7 @@ describe('config file', () => {
     await writeConfig({ systems: { dev: { url: 'https://dev.example.com', client: '100' } } });
     const config = await load(ENV_COMPLETE);
 
-    expect([...config.systems.keys()].sort()).toEqual(['default', 'dev']);
+    expect([...config.systems.keys()].toSorted()).toEqual(['default', 'dev']);
     expect(config.defaultSystem).toBe('default');
   });
 });

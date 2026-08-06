@@ -11,9 +11,9 @@ let cachedBackend: Promise<KeychainBackend> | undefined;
 export function loadKeychainBackend(): Promise<KeychainBackend> {
   cachedBackend ??= import('@zowe/secrets-for-zowe-sdk')
     .then((module) => {
-      const keyring = module.keyring ?? (module as { default?: { keyring?: unknown } }).default?.keyring;
+      const keyring = module.keyring ?? (module as { default?: { keyring?: KeychainBackend } }).default?.keyring;
       if (!keyring) throw new Error('the module did not expose a keyring');
-      return keyring as KeychainBackend;
+      return keyring;
     })
     .catch((error: unknown) => {
       cachedBackend = undefined;
