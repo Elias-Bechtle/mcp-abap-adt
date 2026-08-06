@@ -1,0 +1,65 @@
+import { z } from 'zod';
+
+/**
+ * Authentication methods a system can use. Only Basic authentication is
+ * implemented today; on-premise ADT (`/sap/bc/adt`) is a plain ICF node and
+ * does not accept OAuth bearer tokens, so an OAuth option would only ever
+ * apply to the BTP ABAP Environment.
+ */
+export const AUTH_TYPES = ['basic'] as const;
+export type AuthType = (typeof AUTH_TYPES)[number];
+
+export const SystemConfigSchema = z.object({
+  /** Base URL of the SAP system, e.g. https://vhcalnplci.dummy.nodomain:44300 */
+  url: z.url(),
+  /** Three digit SAP client. Omitted means the system's default client is used. */
+  client: z
+    .string()
+    .regex(/^\d{3}$/, 'client must be a three digit SAP client, e.g. "100"')
+    .optional(),
+  /** Two letter logon language, e.g. "EN". */
+  language: z.string().min(1).optional(),
+  authType: z.enum(AUTH_TYPES).default('basic'),
+  username: z.string().min(1).optional(),
+  /** Plaintext password. Discouraged — prefer passwordEnv or keychain. */
+  password: z.string().optional(),
+  /** Name of an environment variable holding the password. */
+  passwordEnv: z.string().min(1).optional(),
+  /** Look the credentials up in the OS keychain (SAP Fiori tools compatible). */
+  keychain: z.boolean().default(false),
+  /** Accept self-signed / untrusted TLS certificates for this system only. */
+  allowSelfSigned: z.boolean().default(false),
+  timeoutMs: z.number().int().positive().default(30_000),
+});
+
+export type SystemConfig = z.infer<typeof SystemConfigSchema>;
+export type SystemConfigInput = z.input<typeof SystemConfigSchema>;
+
+export const AppConfigFileSchema = z.object({
+  /** Name of the system used when a tool call omits the `system` argument. */
+  defaultSystem: z.string().optional(),
+  /** Adopt systems saved by the SAP Fiori tools VS Code extension. */
+  importFioriSystems: z.boolean().default(false),
+  /**
+   * Systems are validated one by one so a single malformed entry does not
+   * take down the whole configuration.
+   */
+  systems: z.record(z.string(), z.unknown()).default({}),
+});
+
+export type AppConfigFile = z.input<typeof AppConfigFileSchema>;
+
+/** A non-fatal configuration problem, surfaced through ListSystems and stderr. */
+export interface ConfigError {
+  /** 'global' or `system:<name>` */
+  scope: string;
+  message: string;
+}
+
+export interface ResolvedAppConfig {
+  defaultSystem?: string;
+  systems: Map<string, SystemConfig>;
+  errors: ConfigError[];
+  /** Human readable list of the layers that contributed, for diagnostics. */
+  sources: string[];
+}
