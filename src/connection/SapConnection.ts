@@ -63,6 +63,7 @@ export class SapConnection {
   readonly #fetcher: ReturnType<typeof createFetch>;
   #credentials?: Promise<ResolvedCredentials>;
   #csrfToken: string | null = null;
+  #csrfFetch?: Promise<string>;
   #cookies = new Map<string, string>();
 
   constructor(
@@ -86,13 +87,6 @@ export class SapConnection {
     return new URL(this.config.url).origin;
   }
 
-  /** Forgets the session so the next request authenticates from scratch. */
-  reset(): void {
-    this.#csrfToken = null;
-    this.#cookies.clear();
-    this.#credentials = undefined;
-  }
-
   async close(): Promise<void> {
     await this.#agent.close();
   }
@@ -108,7 +102,7 @@ export class SapConnection {
     };
 
     if ((method === 'POST' || method === 'PUT') && !this.#csrfToken) {
-      this.#csrfToken = await this.#fetchCsrfToken(path, options);
+      this.#csrfToken = await this.#sharedCsrfFetch(path, options);
     }
 
     try {
@@ -116,11 +110,23 @@ export class SapConnection {
     } catch (error) {
       // ADT rejects a stale token with 403; refresh once and retry.
       if (error instanceof AdtHttpError && error.status === 403 && error.body.includes('CSRF')) {
-        this.#csrfToken = await this.#fetchCsrfToken(path, options);
+        this.#csrfToken = await this.#sharedCsrfFetch(path, options);
         return this.#execute(path, execute);
       }
       throw error;
     }
+  }
+
+  /**
+   * MCP clients may run tool calls in parallel. Without single-flighting,
+   * every concurrent first POST would fire its own token request; with it,
+   * they all await the same one.
+   */
+  #sharedCsrfFetch(path: string, options: AdtRequestOptions): Promise<string> {
+    this.#csrfFetch ??= this.#fetchCsrfToken(path, options).finally(() => {
+      this.#csrfFetch = undefined;
+    });
+    return this.#csrfFetch;
   }
 
   async #fetchCsrfToken(path: string, options: AdtRequestOptions): Promise<string> {

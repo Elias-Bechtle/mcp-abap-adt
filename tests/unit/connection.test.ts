@@ -116,6 +116,28 @@ describe('CSRF handling', () => {
     expect(calls).toHaveLength(4);
   });
 
+  it('shares one token fetch between concurrent POSTs', async () => {
+    let tokenFetches = 0;
+    const { connection, calls } = connect((call) => {
+      if (call.headers['x-csrf-token'] === 'fetch') {
+        tokenFetches += 1;
+        return { headers: { 'x-csrf-token': 'SHARED' } };
+      }
+      return { body: 'ok' };
+    });
+
+    // MCP clients may run tool calls in parallel; the first POSTs must not
+    // each fire their own token request.
+    await Promise.all([
+      connection.request('/sap/bc/adt/x', { method: 'POST', body: 'a' }),
+      connection.request('/sap/bc/adt/y', { method: 'POST', body: 'b' }),
+      connection.request('/sap/bc/adt/z', { method: 'POST', body: 'c' }),
+    ]);
+
+    expect(tokenFetches).toBe(1);
+    expect(calls.filter((call) => call.method === 'POST')).toHaveLength(3);
+  });
+
   it('gives up rather than retrying forever', async () => {
     const { connection } = connect((call) =>
       call.headers['x-csrf-token'] === 'fetch'

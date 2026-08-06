@@ -7,7 +7,6 @@ import {
   type ConfigError,
   type ResolvedAppConfig,
   type ResolvedSystem,
-  type SystemOrigin,
   SystemConfigSchema,
 } from './schema.js';
 
@@ -229,5 +228,3 @@ function resolveDefaultSystem(
   if (systems.size === 1) return [...systems.keys()][0];
   return undefined;
 }
-
-export type { SystemOrigin };
