@@ -4,83 +4,14 @@ import { createInlineProvider } from '../../src/auth/providers/inline.js';
 import { SapConnection } from '../../src/connection/SapConnection.js';
 import { AdtHttpError, isHttpStatus } from '../../src/connection/errors.js';
 import { ConnectionRegistry, UnknownSystemError } from '../../src/connection/registry.js';
-import {
-  SystemConfigSchema,
-  type ResolvedAppConfig,
-  type ResolvedSystem,
-  type SystemConfig,
-} from '../../src/config/schema.js';
-
-interface RecordedCall {
-  url: URL;
-  method: string;
-  headers: Record<string, string>;
-  body?: string;
-}
-
-interface FakeResponse {
-  status?: number;
-  body?: string;
-  headers?: Record<string, string>;
-  setCookie?: string[];
-}
+import type { ResolvedAppConfig, ResolvedSystem, SystemConfig } from '../../src/config/schema.js';
+import { fakeFetch, testSystem as system, type Responder } from '../helpers/fakeConnection.js';
 
 /**
- * Builds a fetch stand-in so the connection can be exercised without a
- * network. The responder gets every call in order.
+ * Unlike the handler tests, these exercise the CSRF and cookie mechanics
+ * themselves, so every request reaches the responder.
  */
-function fakeFetch(responder: (call: RecordedCall, index: number) => FakeResponse | Error) {
-  const calls: RecordedCall[] = [];
-
-  const fetchImpl = async (input: unknown, init: Record<string, unknown> = {}) => {
-    const rawUrl = typeof input === 'string' ? input : String((input as { url?: string }).url);
-    const headers: Record<string, string> = {};
-    const rawHeaders = init.headers;
-    if (rawHeaders && typeof (rawHeaders as Iterable<[string, string]>)[Symbol.iterator] === 'function') {
-      for (const [key, value] of rawHeaders as Iterable<[string, string]>) headers[key.toLowerCase()] = value;
-    } else if (rawHeaders && typeof rawHeaders === 'object') {
-      for (const [key, value] of Object.entries(rawHeaders)) headers[key.toLowerCase()] = String(value);
-    }
-
-    const call: RecordedCall = {
-      url: new URL(rawUrl),
-      method: typeof init.method === 'string' ? init.method : 'GET',
-      headers,
-      body: typeof init.body === 'string' ? init.body : undefined,
-    };
-    calls.push(call);
-
-    const outcome = responder(call, calls.length - 1);
-    if (outcome instanceof Error) throw outcome;
-
-    const responseHeaders = new Headers(outcome.headers ?? {});
-    for (const cookie of outcome.setCookie ?? []) responseHeaders.append('set-cookie', cookie);
-    return new Response(outcome.body ?? '', {
-      status: outcome.status ?? 200,
-      headers: responseHeaders,
-    });
-  };
-
-  return { fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, calls };
-}
-
-function system(overrides: Partial<SystemConfig> = {}): ResolvedSystem {
-  return {
-    ...SystemConfigSchema.parse({
-      url: 'https://sap.example.com:44300',
-      client: '100',
-      username: 'DEVELOPER',
-      password: 'secret',
-      ...overrides,
-    }),
-    origin: 'config-file',
-  };
-}
-
-function connect(
-  responder: (call: RecordedCall, index: number) => FakeResponse | Error,
-  overrides: Partial<SystemConfig> = {},
-) {
+function connect(responder: Responder, overrides: Partial<SystemConfig> = {}) {
   const { fetchImpl, calls } = fakeFetch(responder);
   const connection = new SapConnection('dev', system(overrides), {
     fetch: fetchImpl,

@@ -4,26 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 import { createInlineProvider } from '../../src/auth/providers/inline.js';
 import { ConnectionRegistry } from '../../src/connection/registry.js';
-import {
-  SystemConfigSchema,
-  type ResolvedAppConfig,
-  type ResolvedSystem,
-  type SystemConfig,
-} from '../../src/config/schema.js';
+import type { ResolvedAppConfig, ResolvedSystem } from '../../src/config/schema.js';
 import { TOOL_DEFINITIONS, createServer } from '../../src/server.js';
-
-function system(overrides: Partial<SystemConfig> = {}): ResolvedSystem {
-  return {
-    ...SystemConfigSchema.parse({
-      url: 'https://sap.example.com:44300',
-      client: '100',
-      username: 'DEVELOPER',
-      password: 'secret',
-      ...overrides,
-    }),
-    origin: 'config-file',
-  };
-}
+import { testSystem as system } from '../helpers/fakeConnection.js';
 
 async function connectClient(config: Partial<ResolvedAppConfig> & { systems: Map<string, ResolvedSystem> }) {
   const resolved: ResolvedAppConfig = { errors: [], sources: [], ...config };
