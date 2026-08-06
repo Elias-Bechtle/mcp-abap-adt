@@ -291,10 +291,26 @@ This keeps verification on and validates the real certificate chain, which is st
 
 **SAP returns 401 or 403** — check the user and client, and that the user may use ADT. Some ADT endpoints need `S_DEVELOP` authorizations.
 
-**Nothing works and you want to see the traffic** — set `MCP_ABAP_ADT_DEBUG=1` for extra stderr diagnostics, or run the inspector:
+**Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1` for extra stderr diagnostics, or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
 ```bash
-npx @modelcontextprotocol/inspector node dist/index.js
+npm run inspect
+```
+
+That builds first and opens the inspector's web UI against the freshly built server. `npm run inspect:cli` does the same without a browser, which is handy for a quick check:
+
+```bash
+npm run inspect:cli -- --method tools/list
+npm run inspect:cli -- --method tools/call --tool-name ListSystems
+npm run inspect:cli -- --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
+```
+
+Both pick up the config file from the working directory, so run them from the project root.
+
+The inspector spawns the server the same way a real MCP client does, **including the reduced set of environment variables**. That makes it a faithful reproduction rather than a friendlier environment: if a certificate fails in your client, it fails here too. Add the variable the same way the client would:
+
+```bash
+npm run inspect:cli -- -e NODE_USE_SYSTEM_CA=1 --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
 ```
 
 ## 8. Migrating from mario-andreschak/mcp-abap-adt
@@ -364,7 +380,11 @@ npm run typecheck
 npm run lint         # oxlint, including type-aware rules
 npm run lint:fix
 npm run fmt          # oxfmt; fmt:check verifies without writing
+npm run inspect      # build, then the MCP Inspector web UI
+npm run inspect:cli  # same without a browser, see Troubleshooting for examples
 ```
+
+The inspector is run through `npx` rather than installed: it pulls in React, Vite and around twenty other packages that CI would otherwise download on every matrix job for a tool CI never uses. The major version is pinned in the script, because the argument order changed between its 1.x and 2.x lines.
 
 The unit tests mock HTTP and the keychain, so they run anywhere. The integration suite talks to a real system and is opt-in:
 
