@@ -2,8 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Entries up to and including 2.0.0 were written by hand in the
+[Keep a Changelog](https://keepachangelog.com/en/1.0.0/) style. From 2.0.0
+onwards they are generated from conventional commits by
+[changelogen](https://github.com/unjs/changelogen) via `npm run release`, which
+is why the style changes further up the file.
 
 ## [2.0.0] - 2026-08-06
 

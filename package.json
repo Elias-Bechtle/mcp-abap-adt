@@ -31,7 +31,8 @@
     "fmt": "oxfmt src tests vitest.config.ts",
     "fmt:check": "oxfmt --check src tests vitest.config.ts",
     "inspect": "npm run build && npx -y @modelcontextprotocol/inspector@2 node dist/index.js",
-    "inspect:cli": "npm run build && npx -y @modelcontextprotocol/inspector@2 --cli node dist/index.js"
+    "inspect:cli": "npm run build && npx -y @modelcontextprotocol/inspector@2 --cli node dist/index.js",
+    "release": "changelogen --release --clean"
   },
   "keywords": [
     "abap",
@@ -68,10 +69,44 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.10",
+    "changelogen": "^0.6.2",
     "oxfmt": "^0.62.0",
     "oxlint": "^1.77.0",
     "oxlint-tsgolint": "^7.0.2001",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
+  },
+  "changelog": {
+    "types": {
+      "feat": {
+        "title": "🚀 Features",
+        "semver": "minor"
+      },
+      "fix": {
+        "title": "🩹 Fixes",
+        "semver": "patch"
+      },
+      "perf": {
+        "title": "⚡ Performance",
+        "semver": "patch"
+      },
+      "refactor": {
+        "title": "💅 Refactors",
+        "semver": "patch"
+      },
+      "build": {
+        "title": "📦 Build",
+        "semver": "patch"
+      },
+      "docs": {
+        "title": "📖 Documentation"
+      },
+      "chore": {
+        "title": "🏡 Chore"
+      },
+      "test": false,
+      "style": false,
+      "ci": false
+    }
   }
 }
