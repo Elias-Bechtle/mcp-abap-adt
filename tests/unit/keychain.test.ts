@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { createKeychainProvider } from '../../src/auth/providers/keychain.js';
-import { testSystem } from '../helpers/fakeConnection.js';
+import { SapConnection } from '../../src/connection/SapConnection.js';
+import { fakeFetch, testSystem } from '../helpers/fakeConnection.js';
 
 /**
  * The native keyring is loaded lazily behind an interface. These tests cover
@@ -25,23 +26,69 @@ describe('keychain availability', () => {
 
     expect(provider.canResolve(testSystem({ keychain: false, passwordEnv: 'PW' }))).toBe(false);
   });
+});
 
-  it('loads the backend only on the first resolve, then reuses it', async () => {
-    let loads = 0;
-    const provider = createKeychainProvider(async () => {
-      loads += 1;
-      return {
-        getPassword: async () => JSON.stringify({ username: 'U', password: 'P' }),
-        setPassword: async () => undefined,
-      };
+function countingKeychain() {
+  let reads = 0;
+  const provider = createKeychainProvider(async () => ({
+    getPassword: async () => {
+      reads += 1;
+      return JSON.stringify({ username: 'U', password: 'P' });
+    },
+    setPassword: async () => undefined,
+  }));
+  return { provider, reads: () => reads };
+}
+
+describe('credential caching on a connection', () => {
+  it('reads the keychain once, not on every request', async () => {
+    const { provider, reads } = countingKeychain();
+    const { fetchImpl } = fakeFetch(() => ({ body: 'ok' }));
+    const connection = new SapConnection('dev', testSystem({ keychain: true, password: undefined }), {
+      fetch: fetchImpl,
+      providers: [provider],
     });
-    const system = testSystem({ keychain: true });
 
-    await provider.resolve('dev', system);
-    await provider.resolve('dev', system);
+    await connection.request('/sap/bc/adt/x');
+    await connection.request('/sap/bc/adt/y');
 
-    // The provider itself does not cache; SapConnection caches the resolved
-    // credentials, so a second resolve here is expected to load again.
-    expect(loads).toBeGreaterThan(0);
+    expect(reads()).toBe(1);
+  });
+
+  it('reads nothing until the first request is made', () => {
+    const { provider, reads } = countingKeychain();
+    const { fetchImpl } = fakeFetch(() => ({ body: 'ok' }));
+
+    const connection = new SapConnection('dev', testSystem({ keychain: true, password: undefined }), {
+      fetch: fetchImpl,
+      providers: [provider],
+    });
+
+    // Constructing a connection must not prompt the OS keychain, otherwise
+    // starting the server would touch every configured system.
+    expect(connection.name).toBe('dev');
+    expect(reads()).toBe(0);
+  });
+
+  it('does not cache a failed lookup, so fixing the entry needs no restart', async () => {
+    let attempts = 0;
+    const provider = createKeychainProvider(async () => ({
+      getPassword: async () => {
+        attempts += 1;
+        return attempts === 1 ? null : JSON.stringify({ username: 'U', password: 'P' });
+      },
+      setPassword: async () => undefined,
+    }));
+    const { fetchImpl } = fakeFetch(() => ({ body: 'ok' }));
+    const connection = new SapConnection('dev', testSystem({ keychain: true, password: undefined }), {
+      fetch: fetchImpl,
+      providers: [provider],
+    });
+
+    await expect(connection.request('/sap/bc/adt/x')).rejects.toThrow(/No keychain entry/);
+    const retried = await connection.request('/sap/bc/adt/x');
+
+    expect(retried.data).toBe('ok');
+    expect(attempts).toBe(2);
   });
 });
