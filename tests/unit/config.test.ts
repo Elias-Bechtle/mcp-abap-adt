@@ -32,9 +32,10 @@ async function writeConfig(config: unknown): Promise<string> {
   return path;
 }
 
+/** Mirrors the real layout written by @sap-ux/store: { systems: { "<id>": entry } }. */
 async function writeFioriStore(dir: string, systems: unknown): Promise<void> {
   await mkdir(join(homeDir, dir), { recursive: true });
-  await writeFile(join(homeDir, dir, 'systems.json'), JSON.stringify(systems), 'utf8');
+  await writeFile(join(homeDir, dir, 'systems.json'), JSON.stringify({ systems }), 'utf8');
 }
 
 const ENV_COMPLETE = {
@@ -231,6 +232,19 @@ describe('SAP Fiori tools discovery', () => {
 
     expect(config.errors).toEqual([]);
     expect([...config.systems.keys()]).toEqual(['dev']);
+  });
+
+  it('also accepts a store without the "systems" wrapper', async () => {
+    await mkdir(join(homeDir, '.saptools'), { recursive: true });
+    await writeFile(
+      join(homeDir, '.saptools', 'systems.json'),
+      JSON.stringify({ 'https://flat.example.com/100': { name: 'FLAT', url: 'https://flat.example.com', client: '100' } }),
+      'utf8',
+    );
+    await writeConfig({ importFioriSystems: true });
+    const config = await load();
+
+    expect(config.systems.get('FLAT')?.url).toBe('https://flat.example.com');
   });
 
   it('is off unless requested', async () => {

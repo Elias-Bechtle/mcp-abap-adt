@@ -40,6 +40,24 @@ export interface FioriDiscoveryResult {
   sources: string[];
 }
 
+/**
+ * The store writes `{ "systems": { "<url>[/<client>]": entry } }`. Older
+ * layouts and a plain array are tolerated so a format change degrades into
+ * "no systems found" rather than a crash.
+ */
+function extractEntries(parsed: unknown): RawFioriSystem[] | undefined {
+  if (Array.isArray(parsed)) return parsed as RawFioriSystem[];
+  if (!parsed || typeof parsed !== 'object') return undefined;
+
+  const record = parsed as Record<string, unknown>;
+  const container =
+    record.systems && typeof record.systems === 'object' ? (record.systems as Record<string, unknown>) : record;
+
+  return Object.values(container).filter(
+    (value): value is RawFioriSystem => Boolean(value) && typeof value === 'object',
+  );
+}
+
 async function readStoreFile(path: string): Promise<RawFioriSystem[] | undefined> {
   let raw: string;
   try {
@@ -48,11 +66,7 @@ async function readStoreFile(path: string): Promise<RawFioriSystem[] | undefined
     return undefined;
   }
   try {
-    const parsed: unknown = JSON.parse(raw);
-    // The store writes an object keyed by system id; tolerate a plain array too.
-    if (Array.isArray(parsed)) return parsed as RawFioriSystem[];
-    if (parsed && typeof parsed === 'object') return Object.values(parsed) as RawFioriSystem[];
-    return undefined;
+    return extractEntries(JSON.parse(raw));
   } catch {
     logDebug(`ignoring unparsable Fiori tools store at ${path}`);
     return undefined;
