@@ -50,7 +50,10 @@ function fakeFetch(responder: (call: RecordedCall, index: number) => FakeRespons
 
     const responseHeaders = new Headers(outcome.headers ?? {});
     for (const cookie of outcome.setCookie ?? []) responseHeaders.append('set-cookie', cookie);
-    return new Response(outcome.body ?? '', { status: outcome.status ?? 200, headers: responseHeaders });
+    return new Response(outcome.body ?? '', {
+      status: outcome.status ?? 200,
+      headers: responseHeaders,
+    });
   };
 
   return { fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, calls };
@@ -123,7 +126,10 @@ describe('CSRF handling', () => {
   it('fetches a token before a POST and replays it with the cookies', async () => {
     const { connection, calls } = connect((call) =>
       call.headers['x-csrf-token'] === 'fetch'
-        ? { headers: { 'x-csrf-token': 'TOKEN-1' }, setCookie: ['SAP_SESSIONID=abc; Path=/; HttpOnly'] }
+        ? {
+            headers: { 'x-csrf-token': 'TOKEN-1' },
+            setCookie: ['SAP_SESSIONID=abc; Path=/; HttpOnly'],
+          }
         : { body: '<rows/>' },
     );
 
@@ -196,7 +202,9 @@ describe('error mapping', () => {
 
   it('explains a certificate failure and points at allowSelfSigned', async () => {
     const tlsFailure = Object.assign(new TypeError('fetch failed'), {
-      cause: Object.assign(new Error('self-signed certificate in chain'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' }),
+      cause: Object.assign(new Error('self-signed certificate in chain'), {
+        code: 'SELF_SIGNED_CERT_IN_CHAIN',
+      }),
     });
     const { connection } = connect(() => tlsFailure);
 
@@ -228,10 +236,7 @@ describe('ConnectionRegistry', () => {
   });
 
   it('lists the configured systems without leaking secrets', () => {
-    const registry = registryFor(
-      { dev: system({ password: 'top-secret', username: 'DEVELOPER' }) },
-      'dev',
-    );
+    const registry = registryFor({ dev: system({ password: 'top-secret', username: 'DEVELOPER' }) }, 'dev');
 
     const listed = registry.listSystems();
 

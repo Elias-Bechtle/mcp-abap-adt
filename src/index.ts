@@ -26,7 +26,11 @@ function loadPackageEnvFile(): void {
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
-    options: { config: { type: 'string' }, system: { type: 'string' }, username: { type: 'string' } },
+    options: {
+      config: { type: 'string' },
+      system: { type: 'string' },
+      username: { type: 'string' },
+    },
     allowPositionals: true,
     strict: false,
   });
@@ -67,8 +71,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   process.on('SIGTERM', shutdown);
 }
 
-const isEntryPoint =
-  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isEntryPoint = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isEntryPoint) {
   main().catch((error: unknown) => {

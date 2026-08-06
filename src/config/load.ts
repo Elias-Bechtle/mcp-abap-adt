@@ -68,17 +68,21 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   }
 
   const appParsed = AppConfigFileSchema.safeParse(rawConfig);
-  const app = appParsed.success
-    ? appParsed.data
-    : { defaultSystem: undefined, importFioriSystems: false, systems: {} };
+  const app = appParsed.success ? appParsed.data : { defaultSystem: undefined, importFioriSystems: false, systems: {} };
   if (!appParsed.success) {
-    errors.push({ scope: 'global', message: `Invalid configuration file: ${formatIssues(appParsed.error)}` });
+    errors.push({
+      scope: 'global',
+      message: `Invalid configuration file: ${formatIssues(appParsed.error)}`,
+    });
   }
 
   for (const [name, value] of Object.entries(app.systems)) {
     const parsed = SystemConfigSchema.safeParse(value);
     if (!parsed.success) {
-      errors.push({ scope: `system:${name}`, message: `Invalid system "${name}": ${formatIssues(parsed.error)}` });
+      errors.push({
+        scope: `system:${name}`,
+        message: `Invalid system "${name}": ${formatIssues(parsed.error)}`,
+      });
       continue;
     }
     systems.set(name, parsed.data);

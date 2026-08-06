@@ -73,7 +73,10 @@ describe('tool calls', () => {
   it('routes a call to the default system', async () => {
     const client = await connectClient(singleSystem);
 
-    const result = await client.callTool({ name: 'GetProgram', arguments: { program_name: 'RSABAPPROGRAM' } });
+    const result = await client.callTool({
+      name: 'GetProgram',
+      arguments: { program_name: 'RSABAPPROGRAM' },
+    });
 
     expect(result.isError).toBe(false);
     expect(result.content).toEqual([{ type: 'text', text: '<abap>source</abap>' }]);

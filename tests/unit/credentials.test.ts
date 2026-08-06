@@ -8,7 +8,11 @@ import type { KeychainBackend } from '../../src/auth/types.js';
 import { SystemConfigSchema, type SystemConfig } from '../../src/config/schema.js';
 
 function system(overrides: Partial<SystemConfig> = {}): SystemConfig {
-  return SystemConfigSchema.parse({ url: 'https://sap.example.com:44300', client: '100', ...overrides });
+  return SystemConfigSchema.parse({
+    url: 'https://sap.example.com:44300',
+    client: '100',
+    ...overrides,
+  });
 }
 
 function fakeKeychain(entries: Record<string, string>): KeychainBackend {
@@ -24,7 +28,10 @@ describe('inline provider', () => {
     const cfg = system({ username: 'DEVELOPER', password: 'secret' });
 
     expect(provider.canResolve(cfg)).toBe(true);
-    await expect(provider.resolve('dev', cfg)).resolves.toEqual({ username: 'DEVELOPER', password: 'secret' });
+    await expect(provider.resolve('dev', cfg)).resolves.toEqual({
+      username: 'DEVELOPER',
+      password: 'secret',
+    });
   });
 
   it('refuses to guess a missing username', async () => {
@@ -39,7 +46,10 @@ describe('env provider', () => {
     const provider = createEnvProvider({ SAP_DEV_PASSWORD: 'from-env' });
     const cfg = system({ username: 'DEVELOPER', passwordEnv: 'SAP_DEV_PASSWORD' });
 
-    await expect(provider.resolve('dev', cfg)).resolves.toEqual({ username: 'DEVELOPER', password: 'from-env' });
+    await expect(provider.resolve('dev', cfg)).resolves.toEqual({
+      username: 'DEVELOPER',
+      password: 'from-env',
+    });
   });
 
   it('names the variable that is missing', async () => {
@@ -54,7 +64,9 @@ describe('keychain provider', () => {
   const account = 'https://sap.example.com:44300/100';
 
   it('reads the SAP Fiori tools JSON secret', async () => {
-    const backend = fakeKeychain({ [account]: JSON.stringify({ username: 'DI0190', password: 'kc-secret' }) });
+    const backend = fakeKeychain({
+      [account]: JSON.stringify({ username: 'DI0190', password: 'kc-secret' }),
+    });
     const provider = createKeychainProvider(async () => backend);
 
     await expect(provider.resolve('dev', system({ keychain: true }))).resolves.toEqual({
@@ -65,7 +77,9 @@ describe('keychain provider', () => {
   });
 
   it('lets the configured username override the stored one', async () => {
-    const backend = fakeKeychain({ [account]: JSON.stringify({ username: 'STORED', password: 'kc-secret' }) });
+    const backend = fakeKeychain({
+      [account]: JSON.stringify({ username: 'STORED', password: 'kc-secret' }),
+    });
     const provider = createKeychainProvider(async () => backend);
 
     await expect(provider.resolve('dev', system({ keychain: true, username: 'OVERRIDE' }))).resolves.toMatchObject({
@@ -118,14 +132,18 @@ describe('provider chain', () => {
     const cfg = system({ username: 'U', password: 'inline', passwordEnv: 'PW', keychain: true });
 
     expect(credentialSourceOf(cfg, providers)).toBe('inline');
-    await expect(resolveCredentials('dev', cfg, providers)).resolves.toMatchObject({ password: 'inline' });
+    await expect(resolveCredentials('dev', cfg, providers)).resolves.toMatchObject({
+      password: 'inline',
+    });
   });
 
   it('prefers an environment reference over the keychain', async () => {
     const cfg = system({ username: 'U', passwordEnv: 'PW', keychain: true });
 
     expect(credentialSourceOf(cfg, providers)).toBe('env');
-    await expect(resolveCredentials('dev', cfg, providers)).resolves.toMatchObject({ password: 'from-env' });
+    await expect(resolveCredentials('dev', cfg, providers)).resolves.toMatchObject({
+      password: 'from-env',
+    });
   });
 
   it('says what to configure when no source applies', async () => {

@@ -67,7 +67,10 @@ export class ConnectionRegistry {
 
     let connection = this.#connections.get(name);
     if (!connection) {
-      connection = new SapConnection(name, system, { fetch: this.deps.fetch, providers: this.#providers });
+      connection = new SapConnection(name, system, {
+        fetch: this.deps.fetch,
+        providers: this.#providers,
+      });
       this.#connections.set(name, connection);
     }
     return connection;

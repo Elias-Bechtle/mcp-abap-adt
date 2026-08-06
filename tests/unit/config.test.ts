@@ -62,7 +62,11 @@ describe('environment fallback', () => {
   });
 
   it('honours SAP_LANGUAGE and TLS_REJECT_UNAUTHORIZED, which older versions ignored', async () => {
-    const config = await load({ ...ENV_COMPLETE, SAP_LANGUAGE: 'DE', TLS_REJECT_UNAUTHORIZED: '0' });
+    const config = await load({
+      ...ENV_COMPLETE,
+      SAP_LANGUAGE: 'DE',
+      TLS_REJECT_UNAUTHORIZED: '0',
+    });
 
     expect(config.systems.get('default')).toMatchObject({ language: 'DE', allowSelfSigned: true });
   });
@@ -93,8 +97,18 @@ describe('config file', () => {
   const twoSystems = {
     defaultSystem: 'dev',
     systems: {
-      dev: { url: 'https://dev.example.com:44300', client: '100', username: 'DEV_USER', keychain: true },
-      prd: { url: 'https://prd.example.com:44300', client: '200', username: 'PRD_USER', keychain: true },
+      dev: {
+        url: 'https://dev.example.com:44300',
+        client: '100',
+        username: 'DEV_USER',
+        keychain: true,
+      },
+      prd: {
+        url: 'https://prd.example.com:44300',
+        client: '200',
+        username: 'PRD_USER',
+        keychain: true,
+      },
     },
   };
 
@@ -129,7 +143,10 @@ describe('config file', () => {
   });
 
   it('reports an unknown defaultSystem but still serves the configured ones', async () => {
-    await writeConfig({ defaultSystem: 'nope', systems: { dev: { url: 'https://dev.example.com', client: '100' } } });
+    await writeConfig({
+      defaultSystem: 'nope',
+      systems: { dev: { url: 'https://dev.example.com', client: '100' } },
+    });
     const config = await load();
 
     expect(config.errors.map((e) => e.message).join('\n')).toContain('defaultSystem "nope"');
@@ -213,11 +230,17 @@ describe('SAP Fiori tools discovery', () => {
     });
     const config = await load();
 
-    expect(config.systems.get('FIORI_DEV')).toMatchObject({ url: 'https://override.example.com', client: '200' });
+    expect(config.systems.get('FIORI_DEV')).toMatchObject({
+      url: 'https://override.example.com',
+      client: '200',
+    });
   });
 
   it('stays quiet when the store does not exist', async () => {
-    await writeConfig({ importFioriSystems: true, systems: { dev: { url: 'https://dev.example.com', client: '100' } } });
+    await writeConfig({
+      importFioriSystems: true,
+      systems: { dev: { url: 'https://dev.example.com', client: '100' } },
+    });
     const config = await load();
 
     expect(config.errors).toEqual([]);
@@ -227,7 +250,10 @@ describe('SAP Fiori tools discovery', () => {
   it('ignores a corrupt store file rather than failing the whole load', async () => {
     await mkdir(join(homeDir, '.saptools'), { recursive: true });
     await writeFile(join(homeDir, '.saptools', 'systems.json'), '{ not json', 'utf8');
-    await writeConfig({ importFioriSystems: true, systems: { dev: { url: 'https://dev.example.com', client: '100' } } });
+    await writeConfig({
+      importFioriSystems: true,
+      systems: { dev: { url: 'https://dev.example.com', client: '100' } },
+    });
     const config = await load();
 
     expect(config.errors).toEqual([]);
@@ -238,7 +264,13 @@ describe('SAP Fiori tools discovery', () => {
     await mkdir(join(homeDir, '.saptools'), { recursive: true });
     await writeFile(
       join(homeDir, '.saptools', 'systems.json'),
-      JSON.stringify({ 'https://flat.example.com/100': { name: 'FLAT', url: 'https://flat.example.com', client: '100' } }),
+      JSON.stringify({
+        'https://flat.example.com/100': {
+          name: 'FLAT',
+          url: 'https://flat.example.com',
+          client: '100',
+        },
+      }),
       'utf8',
     );
     await writeConfig({ importFioriSystems: true });

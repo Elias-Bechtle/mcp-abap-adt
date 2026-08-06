@@ -134,7 +134,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   defineTool(
     'GetCDSView',
     'Retrieve CDS view (DDL source) source code',
-    { cds_view_name: z.string().describe('Name of the CDS view (DDL source name, e.g. I_CURRENCY)') },
+    {
+      cds_view_name: z.string().describe('Name of the CDS view (DDL source name, e.g. I_CURRENCY)'),
+    },
     handleGetCDSView,
   ),
   defineTool(

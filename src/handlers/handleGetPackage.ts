@@ -3,10 +3,7 @@ import convert from 'xml-js';
 import type { SapConnection } from '../connection/SapConnection.js';
 import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
-export async function handleGetPackage(
-  connection: SapConnection,
-  args: { package_name: string },
-): Promise<ToolResult> {
+export async function handleGetPackage(connection: SapConnection, args: { package_name: string }): Promise<ToolResult> {
   try {
     const response = await connection.request('/sap/bc/adt/repository/nodestructure', {
       method: 'POST',

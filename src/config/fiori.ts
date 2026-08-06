@@ -109,7 +109,12 @@ export async function discoverFioriSystems(home: string = homedir()): Promise<Fi
       }
 
       const client = typeof entry.client === 'string' && entry.client.trim() ? entry.client.trim() : undefined;
-      const parsed = SystemConfigSchema.safeParse({ url, client, authType: 'basic', keychain: true });
+      const parsed = SystemConfigSchema.safeParse({
+        url,
+        client,
+        authType: 'basic',
+        keychain: true,
+      });
       if (!parsed.success) {
         errors.push({
           scope: `system:${name}`,
