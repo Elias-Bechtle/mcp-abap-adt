@@ -17,7 +17,7 @@ This is a fork of [mario-andreschak/mcp-abap-adt](https://github.com/mario-andre
 5. [Connecting an MCP client](#5-connecting-an-mcp-client)
 6. [Available tools](#6-available-tools)
 7. [Troubleshooting](#7-troubleshooting)
-8. [Upgrading from 1.x](#8-upgrading-from-1x)
+8. [Migrating from mario-andreschak/mcp-abap-adt](#8-migrating-from-mario-andreschakmcp-abap-adt)
 9. [Development](#9-development)
 
 ## 1. Requirements
@@ -65,9 +65,11 @@ Setting all four of these gives you one system named `default`, which is what to
 | `SAP_PASSWORD` | yes | Password |
 | `SAP_CLIENT` | yes | Three digit client, e.g. `100` |
 | `SAP_LANGUAGE` | no | Logon language, e.g. `EN` |
-| `TLS_REJECT_UNAUTHORIZED` | no | `0` accepts self-signed certificates |
+| `SAP_ALLOW_SELF_SIGNED` | no | `true` accepts self-signed or internally issued certificates |
 
-This is the setup 1.x used, and it keeps working unchanged.
+Every `SAP_*` variable sets one field of the system named `default`, and each has the same name and meaning as the corresponding config-file key.
+
+> `TLS_REJECT_UNAUTHORIZED=0` from earlier versions still works and means the same as `SAP_ALLOW_SELF_SIGNED=true`, but it prints a deprecation warning. The old name is inverted (`0` means "allow") and looks like Node's `NODE_TLS_REJECT_UNAUTHORIZED`, which it is not.
 
 ### Config file (any number of systems)
 
@@ -123,9 +125,25 @@ Per-system options:
 
 **Which system is the default?** In order: the `defaultSystem` you declared, then a system named `default` created from the `SAP_*` variables, then the only system if there is exactly one. Otherwise every tool call must name a system, and calls that don't get an error listing the valid names.
 
-**Precedence.** A system written in the config file wins over one imported from the Fiori tools store with the same name, which in turn wins over the `SAP_*` variables.
+### Adjusting an imported system
 
-Ask the model to call **`ListSystems`** at any time to see what the server actually resolved, including configuration problems. It returns no credentials.
+A config-file entry whose name matches an imported system is treated as an **override**: you only name what differs, and the imported `url`, `client` and `keychain` settings stay. This is how you allow an internally issued certificate on a system that came from SAP Fiori tools:
+
+```jsonc
+{
+  "importFioriSystems": true,
+  "systems": {
+    // DNG001 keeps its imported url and client; only this one setting changes.
+    "DNG001": { "allowSelfSigned": true }
+  }
+}
+```
+
+Spelling out `url` turns the entry into a full definition that replaces the imported one. If an override is invalid, the imported system stays usable and `ListSystems` reports that the override was ignored — a typo in one setting should not cost you access to the system.
+
+The `SAP_*` variables only ever build the system named `default`; they do not affect imported or config-file systems.
+
+Ask the model to call **`ListSystems`** at any time to see what the server actually resolved, including each system's `origin` (`config-file`, `fiori-tools` or `environment`) and any configuration problems. It returns no credentials.
 
 ## 4. Credentials
 
@@ -243,7 +261,7 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 
 **Start with `ListSystems`.** It reports every configuration problem the server found, and it works even when nothing is configured correctly.
 
-**"TLS certificate verification failed"** — the system uses a self-signed or internally issued certificate. Add `"allowSelfSigned": true` to that system, or set `TLS_REJECT_UNAUTHORIZED=0` if you configure through environment variables. Version 1.x disabled verification for everyone; 2.x makes it a per-system decision.
+**"TLS certificate verification failed"** — the system uses a self-signed or internally issued certificate. Add `"allowSelfSigned": true` to that system, or set `SAP_ALLOW_SELF_SIGNED=true` if you configure through environment variables. For a system that came from SAP Fiori tools, add an [override entry](#adjusting-an-imported-system) rather than redeclaring it. Version 1.x disabled verification for everyone; this version makes it a per-system decision.
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
 
@@ -257,13 +275,62 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 npx @modelcontextprotocol/inspector node dist/index.js
 ```
 
-## 8. Upgrading from 1.x
+## 8. Migrating from mario-andreschak/mcp-abap-adt
 
-- **Node.js 22 or newer is required**, and the package is now ESM-only.
-- **TLS certificates are verified.** 1.x passed `rejectUnauthorized: false` unconditionally and ignored the documented `TLS_REJECT_UNAUTHORIZED` variable. Systems with self-signed certificates need `"allowSelfSigned": true` or `TLS_REJECT_UNAUTHORIZED=0`.
-- **`SAP_LANGUAGE` now actually works.** It was documented but never read, so requests that used to run in the user's default language may now run in the language you configured.
-- **The package name changed** to `@janfrl/mcp-abap-adt`; the command stays `mcp-abap-adt`.
-- Existing `SAP_*` environment configurations keep working and become the system named `default`.
+This fork continues from [mario-andreschak/mcp-abap-adt](https://github.com/mario-andreschak/mcp-abap-adt) 1.2.0. All 16 tools keep their names and arguments, so prompts and workflows built against the original keep working.
+
+### The minimum change
+
+Point your MCP client at the new package name. Everything else can stay as it is:
+
+```diff
+ {
+   "mcpServers": {
+     "mcp-abap-adt": {
+       "command": "npx",
+-      "args": ["-y", "mcp-abap-adt"],
++      "args": ["-y", "@janfrl/mcp-abap-adt"],
+       "env": {
+         "SAP_URL": "https://sap.example.com:44300",
+         "SAP_USERNAME": "your_username",
+         "SAP_PASSWORD": "your_password",
+         "SAP_CLIENT": "100"
+       }
+     }
+   }
+ }
+```
+
+Your four `SAP_*` variables continue to work and now describe a system named `default`, which every tool call uses unless it names another one.
+
+### What can break, and what to do about it
+
+| Change | Symptom | Fix |
+| --- | --- | --- |
+| Certificates are verified | `TLS certificate verification failed ... (SELF_SIGNED_CERT_IN_CHAIN)` on the first tool call | Add `SAP_ALLOW_SELF_SIGNED=true` to the `env` block, or `"allowSelfSigned": true` to the system in a config file |
+| Node.js 22 or newer required | The server fails to start | Update Node.js; the package is also ESM-only now |
+| Package renamed | The old name keeps installing the original project | Use `@janfrl/mcp-abap-adt` |
+| `SAP_LANGUAGE` is honoured | ABAP texts arrive in a different language than before | Remove the variable, or set it to the language you want |
+
+The certificate change is the one that will actually bite you. Version 1.2.0 passed `rejectUnauthorized: false` on every request and never read the `TLS_REJECT_UNAUTHORIZED` variable it documented, so **no** certificate was ever checked. Verification is now on by default and can be switched off per system.
+
+`SAP_LANGUAGE` has the same history: documented, never read. Requests that used to run in the user's default logon language now use the configured one.
+
+### Worth adopting afterwards
+
+None of this is required, but it is why the fork exists:
+
+1. **Several systems at once.** Replace the `env` block with a [config file](#config-file-any-number-of-systems) and pass `system` on a tool call to pick one. `ListSystems` shows what the server resolved.
+2. **No password in a file.** If you use the SAP Fiori tools VS Code extension, set `"importFioriSystems": true` and your saved systems, including their passwords, are picked up from the OS keychain. Otherwise run `mcp-abap-adt store-credentials --system <name>` once. See [Credentials](#4-credentials).
+3. **Drop the `.env` file.** It still works from the package directory and the working directory, but a config file with keychain credentials leaves no secret on disk.
+
+### Also fixed along the way
+
+- `GetPackage` encoded the package name twice, which broke namespaced packages such as `/DMO/FLIGHT`.
+- Cookies were sent back including their attributes rather than as `name=value` pairs.
+- Build tooling (TypeScript, Jest) shipped in `dependencies` and was installed at runtime by every `npx` invocation.
+- The server reported itself as version `0.1.0` regardless of the released version.
+- A missing environment variable killed the process before the MCP handshake, which clients could only show as an opaque startup failure. Configuration problems are now reported through `ListSystems`.
 
 ## 9. Development
 

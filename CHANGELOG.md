@@ -20,12 +20,21 @@ published as `@janfrl/mcp-abap-adt`.
 - Credentials from the OS keychain, using the same entries as the SAP Fiori
   tools VS Code extension, plus `passwordEnv` for environment references.
 - `importFioriSystems` adopts systems already saved in SAP Fiori tools,
-  including their stored passwords.
+  including their stored passwords. A config entry with the same name overrides
+  individual settings on an imported system instead of replacing it, so
+  allowing a certificate does not mean repeating its url and client.
+- `ListSystems` reports each system's `origin` (`config-file`, `fiori-tools` or
+  `environment`), which is where a change has to be made.
+- `SAP_ALLOW_SELF_SIGNED` mirrors the `allowSelfSigned` config key in name and
+  polarity. `TLS_REJECT_UNAUTHORIZED` still works as a deprecated alias and
+  warns; it was inverted and looked like Node's own variable without being it.
 - `store-credentials` subcommand for writing a password to the OS keychain
   without VS Code.
 - Per-system `allowSelfSigned`, `timeoutMs` and `language` settings.
 - GitHub Actions CI building and testing on Node 22 and 24, on Linux and
-  Windows.
+  Windows, with oxlint (including type-aware rules) and an oxfmt format check.
+- `npm run typecheck` covers the tests as well, which the build config excludes
+  and vitest only transpiles.
 
 ### Changed
 - Tools are registered through `McpServer.registerTool` with zod schemas,

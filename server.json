@@ -44,8 +44,13 @@
           "isRequired": false
         },
         {
+          "name": "SAP_ALLOW_SELF_SIGNED",
+          "description": "Set to true to accept self-signed or internally issued certificates. Certificates are verified by default.",
+          "isRequired": false
+        },
+        {
           "name": "TLS_REJECT_UNAUTHORIZED",
-          "description": "Set to 0 to accept self-signed certificates. Certificates are verified by default.",
+          "description": "Deprecated, inverted spelling of SAP_ALLOW_SELF_SIGNED. Set to 0 to accept self-signed certificates.",
           "isRequired": false
         },
         {
