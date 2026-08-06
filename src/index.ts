@@ -24,16 +24,28 @@ function loadPackageEnvFile(): void {
 }
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     args: argv,
-    options: { config: { type: 'string' } },
+    options: { config: { type: 'string' }, system: { type: 'string' }, username: { type: 'string' } },
     allowPositionals: true,
     strict: false,
   });
 
   loadPackageEnvFile();
+  const configFile = values.config as string | undefined;
 
-  const config = await loadAppConfig({ configFile: values.config as string | undefined });
+  // A subcommand means this is an interactive run, not an MCP session.
+  if (positionals[0] === 'store-credentials') {
+    const { storeCredentials } = await import('./cli/storeCredentials.js');
+    process.exitCode = await storeCredentials({
+      system: values.system as string | undefined,
+      username: values.username as string | undefined,
+      configFile,
+    });
+    return;
+  }
+
+  const config = await loadAppConfig({ configFile });
   for (const error of config.errors) {
     logWarn(`${error.scope}: ${error.message}`);
   }
