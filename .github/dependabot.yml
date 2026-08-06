@@ -9,6 +9,13 @@ updates:
       # changes are reviewed on their own.
       minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # @types/node must track the oldest Node this package supports, not the
+      # newest that exists. Typing against a newer major would let the compiler
+      # accept APIs that are missing at runtime on the engines floor, so this
+      # stays on 22 until that floor moves.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /

@@ -384,6 +384,8 @@ npm run inspect      # build, then the MCP Inspector web UI
 npm run inspect:cli  # same without a browser, see Troubleshooting for examples
 ```
 
+Two dependencies are deliberately held back, so a routine "everything to latest" pass does not undo them. `@types/node` tracks the oldest supported Node (the `engines` floor of 22) rather than the newest that exists: typing against a newer major would let the compiler accept APIs that are missing at runtime on that floor. `c12` stays on its 3.x line because 4.x is still a prerelease.
+
 The inspector is run through `npx` rather than installed: it pulls in React, Vite and around twenty other packages that CI would otherwise download on every matrix job for a tool CI never uses. The major version is pinned in the script, because the argument order changed between its 1.x and 2.x lines.
 
 The unit tests mock HTTP and the keychain, so they run anywhere. The integration suite talks to a real system and is opt-in:
