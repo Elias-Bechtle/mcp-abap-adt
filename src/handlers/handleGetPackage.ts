@@ -1,45 +1,38 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
 import convert from 'xml-js';
 
-export async function handleGetPackage(args: any) {
-    try {
-        if (!args?.package_name) {
-            throw new McpError(ErrorCode.InvalidParams, 'Package name is required');
-        }
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
-        const nodeContentsUrl = `${await getBaseUrl()}/sap/bc/adt/repository/nodestructure`;
-        const encodedPackageName = encodeURIComponent(args.package_name);
-        const nodeContentsParams = {
-            parent_type: "DEVC/K",
-            parent_name: encodedPackageName,
-            withShortDescriptions: true
-        };
+export async function handleGetPackage(
+  connection: SapConnection,
+  args: { package_name: string },
+): Promise<ToolResult> {
+  try {
+    const response = await connection.request('/sap/bc/adt/repository/nodestructure', {
+      method: 'POST',
+      query: {
+        parent_type: 'DEVC/K',
+        parent_name: args.package_name,
+        withShortDescriptions: true,
+      },
+    });
 
-        const package_structure_response = await makeAdtRequest(nodeContentsUrl, 'POST', 30000, undefined, nodeContentsParams);
-        // xml2js is typed as Element | ElementCompact; the compact form is a plain
-        // object tree that only makes sense to index dynamically.
-        const result = convert.xml2js(package_structure_response.data, {compact: true}) as any;
-        
-        const nodes = result["asx:abap"]?.["asx:values"]?.DATA?.TREE_CONTENT?.SEU_ADT_REPOSITORY_OBJ_NODE || [];
-        const extractedData = (Array.isArray(nodes) ? nodes : [nodes]).filter(node => 
-            node.OBJECT_NAME?._text && node.OBJECT_URI?._text
-        ).map(node => ({
-            OBJECT_TYPE: node.OBJECT_TYPE._text,
-            OBJECT_NAME: node.OBJECT_NAME._text,
-            OBJECT_DESCRIPTION: node.DESCRIPTION?._text,
-            OBJECT_URI: node.OBJECT_URI._text
-        }));
+    // xml2js is typed as Element | ElementCompact; the compact form is a plain
+    // object tree that only makes sense to index dynamically.
+    const result = convert.xml2js(response.data, { compact: true }) as any;
 
-        return {
-            isError: false,
-            content: [{
-                type: 'text',
-                text: JSON.stringify(extractedData)
-            }]
-        };
+    const nodes = result['asx:abap']?.['asx:values']?.DATA?.TREE_CONTENT?.SEU_ADT_REPOSITORY_OBJ_NODE ?? [];
+    const extractedData = (Array.isArray(nodes) ? nodes : [nodes])
+      .filter((node: any) => node.OBJECT_NAME?._text && node.OBJECT_URI?._text)
+      .map((node: any) => ({
+        OBJECT_TYPE: node.OBJECT_TYPE._text,
+        OBJECT_NAME: node.OBJECT_NAME._text,
+        OBJECT_DESCRIPTION: node.DESCRIPTION?._text,
+        OBJECT_URI: node.OBJECT_URI._text,
+      }));
 
-    } catch (error) {
-        return return_error(error);
-    }
+    return return_text(JSON.stringify(extractedData));
+  } catch (error) {
+    return return_error(error);
+  }
 }

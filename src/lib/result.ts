@@ -3,6 +3,8 @@ import { AdtHttpError } from '../connection/errors.js';
 export interface ToolResult {
   isError: boolean;
   content: Array<{ type: 'text'; text: string }>;
+  /** The MCP CallToolResult is open for extension (_meta and friends). */
+  [key: string]: unknown;
 }
 
 export function return_text(text: string): ToolResult {

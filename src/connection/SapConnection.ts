@@ -6,9 +6,12 @@ import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
 import { AdtHttpError, describeTlsFailure } from './errors.js';
 
+/** An array value becomes a repeated query parameter, as ADT facets require. */
+export type QueryValue = string | number | boolean | Array<string | number>;
+
 export interface AdtRequestOptions {
   method?: 'GET' | 'POST' | 'PUT';
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, QueryValue | undefined>;
   /** Raw request body. ADT speaks XML and plain text, never JSON. */
   body?: string;
   headers?: Record<string, string>;
@@ -163,8 +166,8 @@ export class SapConnection {
     }
   }
 
-  #query(extra: AdtRequestOptions['query']): Record<string, string | number | boolean> {
-    const query: Record<string, string | number | boolean> = {};
+  #query(extra: AdtRequestOptions['query']): Record<string, QueryValue> {
+    const query: Record<string, QueryValue> = {};
     // sap-client must be a query parameter; ICF ignores the X-SAP-Client header
     // and would otherwise log on to the system default client.
     if (this.config.client) query['sap-client'] = this.config.client;

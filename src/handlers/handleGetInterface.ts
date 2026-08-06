@@ -1,16 +1,14 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_response, type ToolResult } from '../lib/result.js';
 
-export async function handleGetInterface(args: any) {
-    try {
-        if (!args?.interface_name) {
-            throw new McpError(ErrorCode.InvalidParams, 'Interface name is required');
-        }
-        const encodedInterfaceName = encodeURIComponent(args.interface_name);
-        const url = `${await getBaseUrl()}/sap/bc/adt/oo/interfaces/${encodedInterfaceName}/source/main`;
-        const response = await makeAdtRequest(url, 'GET', 30000);
-        return return_response(response);
-    } catch (error) {
-        return return_error(error);
-    }
+export async function handleGetInterface(
+  connection: SapConnection,
+  args: { interface_name: string },
+): Promise<ToolResult> {
+  try {
+    const path = `/sap/bc/adt/oo/interfaces/${encodeURIComponent(args.interface_name)}/source/main`;
+    return return_response(await connection.request(path));
+  } catch (error) {
+    return return_error(error);
+  }
 }

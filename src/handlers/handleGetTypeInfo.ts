@@ -1,33 +1,19 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_response, type ToolResult } from '../lib/result.js';
 
-export async function handleGetTypeInfo(args: any) {
+export async function handleGetTypeInfo(
+  connection: SapConnection,
+  args: { type_name: string },
+): Promise<ToolResult> {
+  const name = encodeURIComponent(args.type_name);
+  try {
+    return return_response(await connection.request(`/sap/bc/adt/ddic/domains/${name}/source/main`));
+  } catch {
+    // Not a domain — the same name may still be a data element.
     try {
-        if (!args?.type_name) {
-            throw new McpError(ErrorCode.InvalidParams, 'Type name is required');
-        }
+      return return_response(await connection.request(`/sap/bc/adt/ddic/dataelements/${name}`));
     } catch (error) {
-        return return_error(error);
+      return return_error(error);
     }
-
-    const encodedTypeName = encodeURIComponent(args.type_name);
-
-
-    try {
-
-        const url = `${await getBaseUrl()}/sap/bc/adt/ddic/domains/${encodedTypeName}/source/main`;
-        const response = await makeAdtRequest(url, 'GET', 30000);
-        return return_response(response);
-    } catch (error) {
-
-        // no domain found, try data element
-        try {
-            const url = `${await getBaseUrl()}/sap/bc/adt/ddic/dataelements/${encodedTypeName}`;
-            const response = await makeAdtRequest(url, 'GET', 30000);
-            return return_response(response);
-        } catch (error) {
-            return return_error(error);
-        }
-
-    }
+  }
 }

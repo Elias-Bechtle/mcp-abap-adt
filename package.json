@@ -53,7 +53,6 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@zowe/secrets-for-zowe-sdk": "^8.33.4",
-    "axios": "^1.18.1",
     "c12": "^3.3.4",
     "ofetch": "^1.5.1",
     "undici": "^8.10.0",

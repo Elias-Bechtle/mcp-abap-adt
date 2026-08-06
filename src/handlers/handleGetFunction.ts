@@ -1,17 +1,16 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_response, type ToolResult } from '../lib/result.js';
 
-export async function handleGetFunction(args: any) {
-    try {
-        if (!args?.function_name || !args?.function_group) {
-            throw new McpError(ErrorCode.InvalidParams, 'Function name and group are required');
-        }
-        const encodedFunctionName = encodeURIComponent(args.function_name);
-        const encodedFunctionGroup = encodeURIComponent(args.function_group);
-        const url = `${await getBaseUrl()}/sap/bc/adt/functions/groups/${encodedFunctionGroup}/fmodules/${encodedFunctionName}/source/main`;
-        const response = await makeAdtRequest(url, 'GET', 30000);
-        return return_response(response);
-    } catch (error) {
-        return return_error(error);
-    }
+export async function handleGetFunction(
+  connection: SapConnection,
+  args: { function_name: string; function_group: string },
+): Promise<ToolResult> {
+  try {
+    const group = encodeURIComponent(args.function_group);
+    const module = encodeURIComponent(args.function_name);
+    const path = `/sap/bc/adt/functions/groups/${group}/fmodules/${module}/source/main`;
+    return return_response(await connection.request(path));
+  } catch (error) {
+    return return_error(error);
+  }
 }

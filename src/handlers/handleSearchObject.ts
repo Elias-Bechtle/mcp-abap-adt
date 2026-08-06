@@ -1,17 +1,20 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_response, type ToolResult } from '../lib/result.js';
 
-export async function handleSearchObject(args: any) {
-    try {
-        if (!args?.query) {
-            throw new McpError(ErrorCode.InvalidParams, 'Search query is required');
-        }
-        const maxResults = args.maxResults || 100;
-        const encodedQuery = encodeURIComponent(args.query);
-        const url = `${await getBaseUrl()}/sap/bc/adt/repository/informationsystem/search?operation=quickSearch&query=${encodedQuery}&maxResults=${maxResults}`;
-        const response = await makeAdtRequest(url, 'GET', 30000);
-        return return_response(response);
-    } catch (error) {
-        return return_error(error);
-    }
+export async function handleSearchObject(
+  connection: SapConnection,
+  args: { query: string; maxResults?: number },
+): Promise<ToolResult> {
+  try {
+    const response = await connection.request('/sap/bc/adt/repository/informationsystem/search', {
+      query: {
+        operation: 'quickSearch',
+        query: args.query,
+        maxResults: args.maxResults ?? 100,
+      },
+    });
+    return return_response(response);
+  } catch (error) {
+    return return_error(error);
+  }
 }

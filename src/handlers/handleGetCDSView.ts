@@ -1,16 +1,15 @@
-import { McpError, ErrorCode, AxiosResponse } from '../lib/utils.js';
-import { makeAdtRequest, return_error, return_response, getBaseUrl } from '../lib/utils.js';
+import type { SapConnection } from '../connection/SapConnection.js';
+import { return_error, return_response, type ToolResult } from '../lib/result.js';
 
-export async function handleGetCDSView(args: any) {
-    try {
-        if (!args?.cds_view_name) {
-            throw new McpError(ErrorCode.InvalidParams, 'CDS view name is required');
-        }
-        const encodedCdsViewName = encodeURIComponent(String(args.cds_view_name).toUpperCase());
-        const url = `${await getBaseUrl()}/sap/bc/adt/ddic/ddl/sources/${encodedCdsViewName}/source/main`;
-        const response = await makeAdtRequest(url, 'GET', 30000);
-        return return_response(response);
-    } catch (error) {
-        return return_error(error);
-    }
+export async function handleGetCDSView(
+  connection: SapConnection,
+  args: { cds_view_name: string },
+): Promise<ToolResult> {
+  try {
+    const name = encodeURIComponent(args.cds_view_name.toUpperCase());
+    const path = `/sap/bc/adt/ddic/ddl/sources/${name}/source/main`;
+    return return_response(await connection.request(path));
+  } catch (error) {
+    return return_error(error);
+  }
 }
