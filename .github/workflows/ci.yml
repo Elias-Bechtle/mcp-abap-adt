@@ -21,8 +21,18 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npm run fmt:check
+
+      # Correctness first: a formatting nit must not mask a broken build or a
+      # failing test, which is exactly what hid the Windows results once.
       - run: npm run build
       - run: npm test
+      - run: npm run typecheck
+
+      # Style gates last, and each still runs even if an earlier one failed, so
+      # one red run reports every problem instead of only the first.
+      - run: npm run lint
+        if: '!cancelled()'
+      - run: npm run fmt:check
+        if: '!cancelled()'
       - run: npm pack --dry-run
+        if: '!cancelled()'
