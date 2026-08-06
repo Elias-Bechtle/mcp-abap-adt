@@ -49,6 +49,13 @@ export const AppConfigFileSchema = z.object({
 
 export type AppConfigFile = z.input<typeof AppConfigFileSchema>;
 
+/** Where a system's definition came from. Reported by ListSystems. */
+export type SystemOrigin = 'config-file' | 'environment' | 'fiori-tools';
+
+export interface ResolvedSystem extends SystemConfig {
+  origin: SystemOrigin;
+}
+
 /** A non-fatal configuration problem, surfaced through ListSystems and stderr. */
 export interface ConfigError {
   /** 'global' or `system:<name>` */
@@ -58,7 +65,7 @@ export interface ConfigError {
 
 export interface ResolvedAppConfig {
   defaultSystem?: string;
-  systems: Map<string, SystemConfig>;
+  systems: Map<string, ResolvedSystem>;
   errors: ConfigError[];
   /** Human readable list of the layers that contributed, for diagnostics. */
   sources: string[];

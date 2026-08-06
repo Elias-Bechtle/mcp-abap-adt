@@ -4,7 +4,12 @@ import { createInlineProvider } from '../../src/auth/providers/inline.js';
 import { SapConnection } from '../../src/connection/SapConnection.js';
 import { AdtHttpError, isHttpStatus } from '../../src/connection/errors.js';
 import { ConnectionRegistry, UnknownSystemError } from '../../src/connection/registry.js';
-import { SystemConfigSchema, type ResolvedAppConfig, type SystemConfig } from '../../src/config/schema.js';
+import {
+  SystemConfigSchema,
+  type ResolvedAppConfig,
+  type ResolvedSystem,
+  type SystemConfig,
+} from '../../src/config/schema.js';
 
 interface RecordedCall {
   url: URL;
@@ -59,14 +64,17 @@ function fakeFetch(responder: (call: RecordedCall, index: number) => FakeRespons
   return { fetchImpl: fetchImpl as unknown as typeof globalThis.fetch, calls };
 }
 
-function system(overrides: Partial<SystemConfig> = {}): SystemConfig {
-  return SystemConfigSchema.parse({
-    url: 'https://sap.example.com:44300',
-    client: '100',
-    username: 'DEVELOPER',
-    password: 'secret',
-    ...overrides,
-  });
+function system(overrides: Partial<SystemConfig> = {}): ResolvedSystem {
+  return {
+    ...SystemConfigSchema.parse({
+      url: 'https://sap.example.com:44300',
+      client: '100',
+      username: 'DEVELOPER',
+      password: 'secret',
+      ...overrides,
+    }),
+    origin: 'config-file',
+  };
 }
 
 function connect(
@@ -212,7 +220,7 @@ describe('error mapping', () => {
   });
 });
 
-function registryFor(systems: Record<string, SystemConfig>, defaultSystem?: string, fetchImpl?: typeof fetch) {
+function registryFor(systems: Record<string, ResolvedSystem>, defaultSystem?: string, fetchImpl?: typeof fetch) {
   const config: ResolvedAppConfig = {
     defaultSystem,
     systems: new Map(Object.entries(systems)),
@@ -250,6 +258,7 @@ describe('ConnectionRegistry', () => {
         credentialSource: 'inline',
         allowSelfSigned: false,
         isDefault: true,
+        origin: 'config-file',
       },
     ]);
     expect(JSON.stringify(listed)).not.toContain('top-secret');
@@ -272,7 +281,7 @@ describe('ConnectionRegistry', () => {
     const seen: Array<{ host: string; cookie?: string }> = [];
     const fetchImpl = (async (input: unknown, init: Record<string, unknown> = {}) => {
       const url = new URL(String(input));
-      const headers = new Headers((init.headers as HeadersInit) ?? {});
+      const headers = new Headers((init.headers as Record<string, string>) ?? {});
       seen.push({ host: url.host, cookie: headers.get('cookie') ?? undefined });
       const responseHeaders = new Headers({ 'x-csrf-token': `TOKEN-${url.host}` });
       responseHeaders.append('set-cookie', `SESSION=${url.host}; Path=/`);

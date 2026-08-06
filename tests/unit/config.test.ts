@@ -61,14 +61,16 @@ describe('environment fallback', () => {
     });
   });
 
-  it('honours SAP_LANGUAGE and TLS_REJECT_UNAUTHORIZED, which older versions ignored', async () => {
-    const config = await load({
-      ...ENV_COMPLETE,
-      SAP_LANGUAGE: 'DE',
-      TLS_REJECT_UNAUTHORIZED: '0',
-    });
+  it('honours SAP_LANGUAGE, which older versions ignored', async () => {
+    const config = await load({ ...ENV_COMPLETE, SAP_LANGUAGE: 'DE' });
 
-    expect(config.systems.get('default')).toMatchObject({ language: 'DE', allowSelfSigned: true });
+    expect(config.systems.get('default')).toMatchObject({ language: 'DE' });
+  });
+
+  it('records that the system came from the environment', async () => {
+    const config = await load(ENV_COMPLETE);
+
+    expect(config.systems.get('default')?.origin).toBe('environment');
   });
 
   it('reports which variables are missing when the set is incomplete', async () => {
@@ -90,6 +92,48 @@ describe('environment fallback', () => {
 
     expect(config.systems.size).toBe(0);
     expect(config.errors.map((e) => e.message).join('\n')).toContain('No SAP system is configured');
+  });
+});
+
+describe('allowSelfSigned from the environment', () => {
+  it('is off by default, so certificates are verified', async () => {
+    const config = await load(ENV_COMPLETE);
+
+    expect(config.systems.get('default')?.allowSelfSigned).toBe(false);
+  });
+
+  it('is enabled by SAP_ALLOW_SELF_SIGNED', async () => {
+    const values = ['true', '1', 'yes', 'TRUE'];
+
+    const configs = await Promise.all(values.map((value) => load({ ...ENV_COMPLETE, SAP_ALLOW_SELF_SIGNED: value })));
+
+    for (const [index, config] of configs.entries()) {
+      expect(config.systems.get('default')?.allowSelfSigned, values[index]).toBe(true);
+    }
+  });
+
+  it('still accepts the deprecated TLS_REJECT_UNAUTHORIZED with its inverted meaning', async () => {
+    const disabled = await load({ ...ENV_COMPLETE, TLS_REJECT_UNAUTHORIZED: '0' });
+    expect(disabled.systems.get('default')?.allowSelfSigned).toBe(true);
+
+    const enforced = await load({ ...ENV_COMPLETE, TLS_REJECT_UNAUTHORIZED: '1' });
+    expect(enforced.systems.get('default')?.allowSelfSigned).toBe(false);
+  });
+
+  it('lets the current variable win over the deprecated one', async () => {
+    const config = await load({
+      ...ENV_COMPLETE,
+      SAP_ALLOW_SELF_SIGNED: 'false',
+      TLS_REJECT_UNAUTHORIZED: '0',
+    });
+
+    expect(config.systems.get('default')?.allowSelfSigned).toBe(false);
+  });
+
+  it('ignores an empty deprecated variable, as shipped in .env.example', async () => {
+    const config = await load({ ...ENV_COMPLETE, TLS_REJECT_UNAUTHORIZED: '' });
+
+    expect(config.systems.get('default')?.allowSelfSigned).toBe(false);
   });
 });
 
@@ -220,7 +264,54 @@ describe('SAP Fiori tools discovery', () => {
     expect(config.systems.get('SHARED')?.url).toBe('https://current.example.com');
   });
 
-  it('lets an explicitly configured system win over an imported one', async () => {
+  it('marks imported systems with their origin', async () => {
+    await writeFioriStore('.saptools', fioriStore);
+    await writeConfig({ importFioriSystems: true });
+    const config = await load();
+
+    expect(config.systems.get('FIORI_DEV')?.origin).toBe('fiori-tools');
+  });
+
+  it('lets a config entry override single settings without repeating the system', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'FIORI_DEV', url: 'https://fiori.example.com', client: '100' },
+    });
+    // Only the one setting that differs; url and client stay imported.
+    await writeConfig({ importFioriSystems: true, systems: { FIORI_DEV: { allowSelfSigned: true } } });
+    const config = await load();
+
+    expect(config.errors).toEqual([]);
+    expect(config.systems.get('FIORI_DEV')).toMatchObject({
+      url: 'https://fiori.example.com',
+      client: '100',
+      keychain: true,
+      allowSelfSigned: true,
+      origin: 'fiori-tools',
+    });
+  });
+
+  it('keeps the imported system when an override is invalid, and says so', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'FIORI_DEV', url: 'https://fiori.example.com', client: '100' },
+    });
+    await writeConfig({ importFioriSystems: true, systems: { FIORI_DEV: { client: 'nope' } } });
+    const config = await load();
+
+    // Losing access to the system over a typo in one setting would be worse
+    // than ignoring the override.
+    expect(config.systems.get('FIORI_DEV')).toMatchObject({ client: '100' });
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('was ignored, the imported settings are used');
+  });
+
+  it('still requires a url for a system that was not imported', async () => {
+    await writeConfig({ importFioriSystems: true, systems: { ORPHAN: { allowSelfSigned: true } } });
+    const config = await load();
+
+    expect(config.systems.has('ORPHAN')).toBe(false);
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('Invalid system "ORPHAN"');
+  });
+
+  it('lets a fully declared config entry replace an imported one', async () => {
     await writeFioriStore('.saptools', {
       a: { name: 'FIORI_DEV', url: 'https://fiori.example.com', client: '100' },
     });

@@ -6,17 +6,21 @@ import {
   AppConfigFileSchema,
   type ConfigError,
   type ResolvedAppConfig,
-  type SystemConfig,
+  type ResolvedSystem,
+  type SystemOrigin,
   SystemConfigSchema,
 } from './schema.js';
 
 /** Base name c12 uses to find mcp-abap-adt.config.{ts,jsonc,yaml,...} and rc files. */
 export const CONFIG_NAME = 'mcp-abap-adt';
 
-/** Name of the system synthesised from the legacy SAP_* environment variables. */
+/** Name of the system synthesised from the SAP_* environment variables. */
 export const ENV_SYSTEM_NAME = 'default';
 
 const ENV_KEYS = ['SAP_URL', 'SAP_USERNAME', 'SAP_PASSWORD', 'SAP_CLIENT'] as const;
+
+/** Replaced by SAP_ALLOW_SELF_SIGNED, which matches the config key and its polarity. */
+const LEGACY_TLS_ENV = 'TLS_REJECT_UNAUTHORIZED';
 
 export interface LoadAppConfigOptions {
   cwd?: string;
@@ -32,9 +36,19 @@ function formatIssues(error: { issues: Array<{ path: PropertyKey[]; message: str
 }
 
 /**
- * Loads the server configuration from (in order of precedence) an explicit
- * config file, c12's discovered config layers, the SAP Fiori tools store and
- * the legacy SAP_* environment variables.
+ * Lays a config-file entry over an imported system so an override only has to
+ * name what it changes. Without this, adjusting one setting on a system that
+ * came from the SAP Fiori tools store would mean repeating its url and client.
+ */
+function mergeOverride(base: ResolvedSystem, override: unknown): unknown {
+  if (!override || typeof override !== 'object' || Array.isArray(override)) return override;
+  const explicit = Object.fromEntries(Object.entries(override).filter(([, value]) => value !== undefined));
+  return { ...base, ...explicit };
+}
+
+/**
+ * Loads the server configuration from a config file, the SAP Fiori tools store
+ * and the SAP_* environment variables.
  *
  * This function never throws. A stdio MCP server that dies before the
  * handshake surfaces in clients as an opaque "server failed to start", so
@@ -45,7 +59,7 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   const env = options.env ?? process.env;
   const errors: ConfigError[] = [];
   const sources: string[] = [];
-  const systems = new Map<string, SystemConfig>();
+  const systems = new Map<string, ResolvedSystem>();
 
   let rawConfig: unknown = {};
   try {
@@ -76,16 +90,35 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
     });
   }
 
+  // Imported systems are resolved first so config-file entries can override
+  // individual settings on them instead of replacing them wholesale.
+  const imported = new Map<string, ResolvedSystem>();
+  if (app.importFioriSystems) {
+    const discovered = await discoverFioriSystems(options.homeDir);
+    errors.push(...discovered.errors);
+    sources.push(...discovered.sources);
+    for (const [name, system] of discovered.systems) {
+      imported.set(name, { ...system, origin: 'fiori-tools' });
+    }
+  }
+
   for (const [name, value] of Object.entries(app.systems)) {
-    const parsed = SystemConfigSchema.safeParse(value);
+    const base = imported.get(name);
+    const parsed = SystemConfigSchema.safeParse(base ? mergeOverride(base, value) : value);
     if (!parsed.success) {
+      // A broken override leaves the imported system in place rather than
+      // removing it: a typo in one optional setting should not cost access to
+      // the whole system. Entries with no import to fall back on are dropped.
       errors.push({
         scope: `system:${name}`,
-        message: `Invalid system "${name}": ${formatIssues(parsed.error)}`,
+        message: base
+          ? `The override for imported system "${name}" was ignored, the imported settings are used instead: ${formatIssues(parsed.error)}`
+          : `Invalid system "${name}": ${formatIssues(parsed.error)}`,
       });
       continue;
     }
-    systems.set(name, parsed.data);
+    imported.delete(name);
+    systems.set(name, { ...parsed.data, origin: base ? 'fiori-tools' : 'config-file' });
     if (parsed.data.password) {
       logWarn(
         `system "${name}" has a plaintext password in the configuration file. Prefer "passwordEnv" or "keychain": true.`,
@@ -93,15 +126,7 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
     }
   }
 
-  if (app.importFioriSystems) {
-    const discovered = await discoverFioriSystems(options.homeDir);
-    errors.push(...discovered.errors);
-    sources.push(...discovered.sources);
-    for (const [name, system] of discovered.systems) {
-      // An explicitly configured system always wins over an imported one.
-      if (!systems.has(name)) systems.set(name, system);
-    }
-  }
+  for (const [name, system] of imported) systems.set(name, system);
 
   applyEnvFallback({ env, systems, errors, sources });
 
@@ -118,9 +143,31 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   return { defaultSystem, systems, errors, sources };
 }
 
+function isTruthy(value: string): boolean {
+  return value === '1' || value === 'true' || value === 'yes';
+}
+
+/**
+ * SAP_ALLOW_SELF_SIGNED mirrors the config key in both name and polarity.
+ * TLS_REJECT_UNAUTHORIZED is the inverted spelling older versions documented
+ * (but never read); it still works so an upgrade needs no edit.
+ */
+function readAllowSelfSigned(env: NodeJS.ProcessEnv): boolean {
+  const current = env.SAP_ALLOW_SELF_SIGNED?.trim().toLowerCase();
+  if (current) return isTruthy(current);
+
+  const legacy = env[LEGACY_TLS_ENV]?.trim().toLowerCase();
+  if (!legacy) return false;
+
+  logWarn(
+    `${LEGACY_TLS_ENV} is deprecated; use SAP_ALLOW_SELF_SIGNED=true instead (note the inverted meaning: ${LEGACY_TLS_ENV}=0 equals SAP_ALLOW_SELF_SIGNED=true).`,
+  );
+  return legacy === '0' || legacy === 'false';
+}
+
 function applyEnvFallback(ctx: {
   env: NodeJS.ProcessEnv;
-  systems: Map<string, SystemConfig>;
+  systems: Map<string, ResolvedSystem>;
   errors: ConfigError[];
   sources: string[];
 }): void {
@@ -145,16 +192,13 @@ function applyEnvFallback(ctx: {
     return;
   }
 
-  // TLS_REJECT_UNAUTHORIZED and SAP_LANGUAGE were documented but never read by
-  // earlier versions; honour them here so the documentation becomes true.
-  const tlsSetting = env.TLS_REJECT_UNAUTHORIZED?.trim().toLowerCase();
   const parsed = SystemConfigSchema.safeParse({
     url: env.SAP_URL,
     client: env.SAP_CLIENT,
     language: env.SAP_LANGUAGE || undefined,
     username: env.SAP_USERNAME,
     password: env.SAP_PASSWORD,
-    allowSelfSigned: tlsSetting === '0' || tlsSetting === 'false',
+    allowSelfSigned: readAllowSelfSigned(env),
   });
 
   if (!parsed.success) {
@@ -165,13 +209,13 @@ function applyEnvFallback(ctx: {
     return;
   }
 
-  systems.set(ENV_SYSTEM_NAME, parsed.data);
+  systems.set(ENV_SYSTEM_NAME, { ...parsed.data, origin: 'environment' });
   sources.push('SAP_* environment variables');
 }
 
 function resolveDefaultSystem(
   configured: string | undefined,
-  systems: Map<string, SystemConfig>,
+  systems: Map<string, ResolvedSystem>,
   errors: ConfigError[],
 ): string | undefined {
   if (configured) {
@@ -185,3 +229,5 @@ function resolveDefaultSystem(
   if (systems.size === 1) return [...systems.keys()][0];
   return undefined;
 }
+
+export type { SystemOrigin };

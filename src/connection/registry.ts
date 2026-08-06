@@ -1,6 +1,6 @@
 import { credentialSourceOf, defaultCredentialProviders } from '../auth/resolve.js';
 import type { CredentialProvider, CredentialSource } from '../auth/types.js';
-import type { ConfigError, ResolvedAppConfig } from '../config/schema.js';
+import type { ConfigError, ResolvedAppConfig, SystemOrigin } from '../config/schema.js';
 import { SapConnection, type SapConnectionDeps } from './SapConnection.js';
 
 /** Raised when a tool asks for a system that is not configured. */
@@ -21,6 +21,8 @@ export interface SystemInfo {
   credentialSource: CredentialSource | 'none';
   allowSelfSigned: boolean;
   isDefault: boolean;
+  /** Where the system was defined, which is where a change has to be made. */
+  origin: SystemOrigin;
 }
 
 export interface ConnectionRegistryDeps extends SapConnectionDeps {
@@ -86,6 +88,7 @@ export class ConnectionRegistry {
       credentialSource: credentialSourceOf(system, this.#providers) ?? 'none',
       allowSelfSigned: system.allowSelfSigned,
       isDefault: name === this.config.defaultSystem,
+      origin: system.origin,
     }));
   }
 

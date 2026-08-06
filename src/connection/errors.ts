@@ -41,9 +41,13 @@ function findCertificateErrorCode(error: unknown, depth = 0): string | undefined
 export function describeTlsFailure(error: unknown, systemName: string): Error | undefined {
   const code = findCertificateErrorCode(error);
   if (!code) return undefined;
+  // Both configuration surfaces are named because the message must be
+  // actionable for someone who has no config file at all.
   return new Error(
     `TLS certificate verification failed for system "${systemName}" (${code}). ` +
-      `If this system uses a self-signed or internally issued certificate, set "allowSelfSigned": true for it in the configuration file.`,
+      'If this system uses a self-signed or internally issued certificate, allow it explicitly: ' +
+      `add "allowSelfSigned": true to the "${systemName}" entry in your configuration file, ` +
+      'or set SAP_ALLOW_SELF_SIGNED=true if you configure the server through environment variables.',
     { cause: error },
   );
 }

@@ -1,0 +1,13 @@
+// Type-checks everything, including the tests that the build config excludes.
+// Vitest only transpiles, so without this a type error in a test goes unnoticed.
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  // "exclude" is inherited through "extends" and would otherwise keep the
+  // tests out again, overriding "include".
+  "exclude": ["node_modules", "dist"],
+  "include": ["src/**/*", "tests/**/*", "vitest.config.ts"]
+}
