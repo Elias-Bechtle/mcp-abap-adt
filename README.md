@@ -272,6 +272,9 @@ npm install
 npm run build        # compile to dist/
 npm test             # unit tests, no SAP system needed
 npm run typecheck
+npm run lint         # oxlint, including type-aware rules
+npm run lint:fix
+npm run fmt          # oxfmt; fmt:check verifies without writing
 ```
 
 The unit tests mock HTTP and the keychain, so they run anywhere. The integration suite talks to a real system and is opt-in:
