@@ -1,7 +1,7 @@
 {
-  "name": "mcp-abap-adt",
+  "name": "@janfrl/mcp-abap-adt",
   "version": "1.2.0",
-  "mcpName": "io.github.mario-andreschak/mcp-abap-adt",
+  "mcpName": "io.github.janfrl/mcp-abap-adt",
   "main": "dist/index.js",
   "bin": {
     "mcp-abap-adt": "dist/index.js"
@@ -22,7 +22,10 @@
     "mcp",
     "model-context-protocol"
   ],
-  "author": "mario-andreschak",
+  "author": "janfrl",
+  "contributors": [
+    "mario-andreschak (original author of mcp-abap-adt)"
+  ],
   "description": "ABAP ADT (ABAP Development Tools) MCP Server for interacting with SAP systems",
   "license": "MIT",
   "publishConfig": {
@@ -30,7 +33,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mario-andreschak/mcp-abap-adt.git"
+    "url": "git+https://github.com/janfrl/mcp-abap-adt.git"
+  },
+  "homepage": "https://github.com/janfrl/mcp-abap-adt#readme",
+  "bugs": {
+    "url": "https://github.com/janfrl/mcp-abap-adt/issues"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
