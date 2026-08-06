@@ -263,7 +263,27 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 
 **Start with `ListSystems`.** It reports every configuration problem the server found, and it works even when nothing is configured correctly.
 
-**"TLS certificate verification failed"** — the system uses a self-signed or internally issued certificate. Add `"allowSelfSigned": true` to that system, or set `SAP_ALLOW_SELF_SIGNED=true` if you configure through environment variables. For a system that came from SAP Fiori tools, add an [override entry](#adjusting-an-imported-system) rather than redeclaring it. Version 1.x disabled verification for everyone; this version makes it a per-system decision.
+**"TLS certificate verification failed"** — the system's certificate is not trusted by the server process. Before switching verification off, check the next entry: in a company network the certificate is usually fine and only the trust store is missing.
+
+If the certificate genuinely cannot be validated, add `"allowSelfSigned": true` to that system, or set `SAP_ALLOW_SELF_SIGNED=true` if you configure through environment variables. For a system that came from SAP Fiori tools, add an [override entry](#adjusting-an-imported-system) rather than redeclaring it. Version 1.x disabled verification for everyone; this version makes it a per-system decision.
+
+**Certificates work in your shell but not through your MCP client** — MCP clients do not hand the server your whole environment. They pass a small fixed list (`PATH`, `APPDATA`, `USERPROFILE`, `TEMP` and a few more), so anything you rely on for certificate trust is silently dropped.
+
+This bites in company networks, where the SAP certificate is issued by an internal CA that the operating system trusts but Node's bundled CA list does not. Node only consults the OS trust store when told to, so pass that setting explicitly in the client's `env` block:
+
+```json
+{
+  "mcpServers": {
+    "mcp-abap-adt": {
+      "command": "node",
+      "args": ["C:/path/to/mcp-abap-adt/dist/index.js", "--config", "C:/path/to/mcp-abap-adt.config.jsonc"],
+      "env": { "NODE_USE_SYSTEM_CA": "1" }
+    }
+  }
+}
+```
+
+This keeps verification on and validates the real certificate chain, which is strictly better than `allowSelfSigned`. The same applies to `NODE_EXTRA_CA_CERTS` if your CA bundle lives in a file.
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
 
