@@ -60,7 +60,10 @@ export function parseDataPreview(xml: string): DataPreviewResult | undefined {
     rows.push(columnValues.map((values) => values[index] ?? ''));
   }
 
-  const totalRows = Number(textOf(table['dataPreview:totalRows']));
+  // Number('') is 0, so an absent element must be treated as unknown rather
+  // than as zero, which would read as "n rows returned, 0 total".
+  const totalRowsText = textOf(table['dataPreview:totalRows']);
+  const totalRows = totalRowsText === '' ? Number.NaN : Number(totalRowsText);
   const executedQuery = textOf(table['dataPreview:executedQueryString']).replace(/\s+/gu, ' ').trim();
 
   return {

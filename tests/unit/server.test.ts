@@ -96,6 +96,76 @@ describe('tool calls', () => {
   });
 });
 
+describe('ExecuteQuery over the protocol', () => {
+  const twoRows =
+    '<dataPreview:tableData xmlns:dataPreview="http://www.sap.com/adt/dataPreview">' +
+    '<dataPreview:columns><dataPreview:metadata dataPreview:name="MANDT"/><dataPreview:dataSet>' +
+    '<dataPreview:data>000</dataPreview:data><dataPreview:data>100</dataPreview:data>' +
+    '</dataPreview:dataSet></dataPreview:columns></dataPreview:tableData>';
+
+  async function client() {
+    const registry = new ConnectionRegistry(
+      { systems: new Map([['dev', system()]]), defaultSystem: 'dev', errors: [], sources: [] },
+      {
+        providers: [createInlineProvider()],
+        // ExecuteQuery posts, so the connection primes a CSRF token first.
+        fetch: (async () =>
+          new Response(twoRows, {
+            status: 200,
+            headers: { 'x-csrf-token': 'TEST-TOKEN' },
+          })) as unknown as typeof globalThis.fetch,
+      },
+    );
+    const mcp = new Client({ name: 'test', version: '1.0.0' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([mcp.connect(a), createServer(registry).connect(b)]);
+    return mcp;
+  }
+
+  it('returns CSV rather than the ADT XML', async () => {
+    const result = await (
+      await client()
+    ).callTool({
+      name: 'ExecuteQuery',
+      arguments: { query: 'SELECT mandt FROM t000' },
+    });
+
+    expect(result.isError).toBe(false);
+    expect((result.content as Array<{ text: string }>)[0].text).toBe(['# 2 rows', 'MANDT', '000', '100'].join('\n'));
+  });
+
+  it('requires a query', async () => {
+    const result = await (await client()).callTool({ name: 'ExecuteQuery', arguments: {} });
+
+    expect(result.isError).toBe(true);
+  });
+
+  it.each([
+    ['above the cap', 99_999],
+    ['below one', 0],
+  ])('rejects maxRows %s before the handler runs', async (_label, maxRows) => {
+    const result = await (
+      await client()
+    ).callTool({
+      name: 'ExecuteQuery',
+      arguments: { query: 'SELECT mandt FROM t000', maxRows },
+    });
+
+    expect(result.isError).toBe(true);
+  });
+
+  it('caps GetTableContents the same way', async () => {
+    const result = await (
+      await client()
+    ).callTool({
+      name: 'GetTableContents',
+      arguments: { table_name: 'T000', max_rows: 99_999 },
+    });
+
+    expect(result.isError).toBe(true);
+  });
+});
+
 describe('ListSystems', () => {
   it('describes the systems without revealing credentials', async () => {
     const client = await connectClient({

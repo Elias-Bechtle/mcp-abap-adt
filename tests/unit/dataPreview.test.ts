@@ -77,6 +77,14 @@ describe('parseDataPreview', () => {
     expect(parseDataPreview(empty)).toMatchObject({ columns: ['MANDT'], rows: [] });
   });
 
+  it('treats a missing totalRows as unknown, not as zero', () => {
+    // Number('') is 0, which would otherwise print "2 rows returned, 0 total".
+    const result = parseDataPreview(tableData([{ name: 'MANDT', values: ['000', '100'] }]));
+
+    expect(result?.totalRows).toBeUndefined();
+    expect(formatDataPreview(result!)).toContain('# 2 rows\n');
+  });
+
   it('gives up on a payload that is not a data preview', () => {
     expect(parseDataPreview('<abap>source code</abap>')).toBeUndefined();
     expect(parseDataPreview('not xml at all <<<')).toBeUndefined();

@@ -17,9 +17,9 @@ published as `@janfr/mcp-abap-adt`.
 
 ### Added
 - Support for several SAP systems at once. Systems are named in a config file
-  discovered by c12 (`mcp-abap-adt.config.{jsonc,yaml,ts,...}`, rc files,
-  `~/.config/mcp-abap-adt/`, `--config`, `MCP_ABAP_ADT_CONFIG`), and every tool
-  takes an optional `system` argument.
+  (`mcp-abap-adt.config.{jsonc,yaml,ts,...}`) found in the working directory or
+  given explicitly via `--config` or `MCP_ABAP_ADT_CONFIG`, and every tool takes
+  an optional `system` argument.
 - `ListSystems` tool reporting the configured systems, the default one and any
   configuration problems, without exposing credentials.
 - Credentials from the OS keychain, using the same entries as the SAP Fiori
