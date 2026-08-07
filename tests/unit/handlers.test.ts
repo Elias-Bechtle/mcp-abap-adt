@@ -4,6 +4,7 @@ import type { SapConnection } from '../../src/connection/SapConnection.js';
 import type { ToolResult } from '../../src/lib/result.js';
 import { fakeConnection, type FakeResponse, type RecordedCall } from '../helpers/fakeConnection.js';
 
+import { handleExecuteQuery } from '../../src/handlers/handleExecuteQuery.js';
 import { handleGetBehaviorDefinition } from '../../src/handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from '../../src/handlers/handleGetCDSView.js';
 import { handleGetClass } from '../../src/handlers/handleGetClass.js';
@@ -236,6 +237,71 @@ describe('GetTableContents', () => {
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Invalid table name');
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('ExecuteQuery', () => {
+  const twoRows =
+    '<dataPreview:tableData xmlns:dataPreview="http://www.sap.com/adt/dataPreview">' +
+    '<dataPreview:totalRows>2</dataPreview:totalRows>' +
+    '<dataPreview:columns><dataPreview:metadata dataPreview:name="MANDT"/><dataPreview:dataSet>' +
+    '<dataPreview:data>000</dataPreview:data><dataPreview:data>100</dataPreview:data>' +
+    '</dataPreview:dataSet></dataPreview:columns></dataPreview:tableData>';
+
+  it('posts the query verbatim and returns CSV', async () => {
+    const { connection, calls } = fakeConnection(() => ({ body: twoRows }));
+
+    const result = await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000', maxRows: 5 });
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toBe(['# 2 rows', 'MANDT', '000', '100'].join('\n'));
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/datapreview/freestyle');
+    expect(calls[0].url.searchParams.get('rowNumber')).toBe('5');
+    expect(calls[0].body).toBe('SELECT mandt FROM t000');
+  });
+
+  it('accepts a common table expression', async () => {
+    const { connection, calls } = fakeConnection(() => ({ body: twoRows }));
+
+    await handleExecuteQuery(connection, { query: '  WITH +x AS ( SELECT mandt FROM t000 ) SELECT * FROM +x  ' });
+
+    // The body is trimmed, otherwise ABAP SQL trips over the leading blanks.
+    expect(calls[0].body).toBe('WITH +x AS ( SELECT mandt FROM t000 ) SELECT * FROM +x');
+  });
+
+  it.each([
+    ['an update', 'UPDATE t000 SET mtext = @x'],
+    ['a delete', 'delete from t000'],
+    ['a semicolon', 'SELECT * FROM t000; SELECT * FROM t001'],
+    ['nothing at all', '   '],
+  ])('refuses %s without contacting the system', async (_label, query) => {
+    const { connection, calls } = fakeConnection(() => ({ body: twoRows }));
+
+    const result = await handleExecuteQuery(connection, { query });
+
+    expect(result.isError).toBe(true);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('explains how to switch free SQL back on when it is disabled', async () => {
+    const { connection, calls } = fakeConnection(() => ({ body: twoRows }), { system: { allowFreeSql: false } });
+
+    const result = await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000' });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('allowFreeSql');
+    expect(textOf(result)).toContain('SAP_ALLOW_FREE_SQL');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('surfaces a SAP syntax error rather than swallowing it', async () => {
+    const { connection } = fakeConnection(() => ({ status: 400, body: 'Only one SELECT statement is allowed.' }));
+
+    const result = await handleExecuteQuery(connection, { query: 'SELECT * FROM t000 UP TO 1 ROWS' });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('Only one SELECT statement is allowed');
   });
 });
 

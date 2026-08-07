@@ -6,6 +6,7 @@ import type { ConnectionRegistry } from './connection/registry.js';
 import { return_error, type ToolResult } from './lib/result.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
+import { handleExecuteQuery } from './handlers/handleExecuteQuery.js';
 import { handleGetBehaviorDefinition } from './handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from './handlers/handleGetCDSView.js';
 import { handleGetClass } from './handlers/handleGetClass.js';
@@ -23,6 +24,12 @@ import { handleGetTransaction } from './handlers/handleGetTransaction.js';
 import { handleGetTypeInfo } from './handlers/handleGetTypeInfo.js';
 import { handleListSystems } from './handlers/handleListSystems.js';
 import { handleSearchObject } from './handlers/handleSearchObject.js';
+
+/**
+ * Ceiling for both row-returning tools. A model asking for millions of rows
+ * would hurt the SAP system long before the answer became useful.
+ */
+const MAX_ROW_LIMIT = 5000;
 
 /** Mixed into every ADT tool so a call can pick which system to talk to. */
 const systemArgument = {
@@ -91,12 +98,27 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   ),
   defineTool(
     'GetTableContents',
-    'Retrieve contents of an ABAP table',
+    'Retrieve all columns of an ABAP table. Prefer ExecuteQuery when only some columns or rows are needed.',
     {
       table_name: z.string().describe('Name of the ABAP table'),
-      max_rows: z.number().default(100).describe('Maximum number of rows to retrieve'),
+      max_rows: z.number().int().min(1).max(MAX_ROW_LIMIT).default(100).describe('Maximum number of rows to retrieve'),
     },
     handleGetTableContents,
+  ),
+  defineTool(
+    'ExecuteQuery',
+    'Run a read-only ABAP SQL SELECT against a SAP system and return the rows as CSV. ' +
+      'Use this rather than GetTableContents whenever only some columns or rows are needed: ' +
+      'projecting and filtering keeps the answer small. Aggregates such as COUNT(*) work too. ' +
+      'Dialect notes: ABAP SQL, exactly one SELECT statement, no trailing semicolon, ' +
+      'ASCENDING/DESCENDING instead of ASC/DESC, and no LIMIT clause - use maxRows instead.',
+    {
+      query: z
+        .string()
+        .describe("The SELECT statement, for example: SELECT carrid, connid FROM sflight WHERE carrid = 'LH'"),
+      maxRows: z.number().int().min(1).max(MAX_ROW_LIMIT).default(100).describe('Maximum number of rows to return'),
+    },
+    handleExecuteQuery,
   ),
   defineTool(
     'GetPackage',

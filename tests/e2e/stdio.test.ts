@@ -75,7 +75,7 @@ describe.skipIf(!built)('server over stdio', () => {
 
     const { tools } = await client.listTools();
 
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(18);
     await client.close();
   });
 

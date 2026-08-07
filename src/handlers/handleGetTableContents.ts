@@ -1,5 +1,6 @@
 import type { SapConnection } from '../connection/SapConnection.js';
-import { return_error, return_response, type ToolResult } from '../lib/result.js';
+import { compactDataPreview } from '../lib/dataPreview.js';
+import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
 export async function handleGetTableContents(
   connection: SapConnection,
@@ -18,7 +19,7 @@ export async function handleGetTableContents(
       query: { rowNumber: args.max_rows ?? 100 },
       headers: { 'Content-Type': 'text/plain', Accept: 'application/xml, text/plain, */*' },
     });
-    return return_response(response);
+    return return_text(compactDataPreview(response.data));
   } catch (error) {
     return return_error(error);
   }

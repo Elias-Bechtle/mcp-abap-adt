@@ -31,7 +31,7 @@ describe('tool surface', () => {
     const names = tools.map((tool) => tool.name).toSorted();
 
     expect(names).toEqual([...TOOL_DEFINITIONS.map((tool) => tool.name), 'ListSystems'].toSorted());
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(18);
   });
 
   it('keeps the original tool names and required arguments', async () => {
@@ -127,7 +127,7 @@ describe('ListSystems', () => {
     });
 
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(17);
+    expect(tools).toHaveLength(18);
 
     const result = await client.callTool({ name: 'ListSystems', arguments: {} });
     expect((result.content as Array<{ text: string }>)[0].text).toContain('No SAP system is configured.');
