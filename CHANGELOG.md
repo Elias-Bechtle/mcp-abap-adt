@@ -10,6 +10,30 @@ onwards they are generated from conventional commits by
 [changelogen](https://github.com/unjs/changelogen) via `npm run release`, which
 is why the style changes further up the file.
 
+## v2.1.0
+
+[compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.0.0...v2.1.0)
+
+### 🚀 Features
+
+- **lib:** Parse and compact the ADT data preview payload ([59adda2](https://github.com/janfrl/mcp-abap-adt/commit/59adda2))
+- **config:** Add allowFreeSql, on by default ([2742e01](https://github.com/janfrl/mcp-abap-adt/commit/2742e01))
+- **server:** Add ExecuteQuery and return table data as CSV ([db1e1af](https://github.com/janfrl/mcp-abap-adt/commit/db1e1af))
+
+### 🩹 Fixes
+
+- **lib:** Treat a missing totalRows as unknown rather than zero ([975aca4](https://github.com/janfrl/mcp-abap-adt/commit/975aca4))
+- **lib:** State the row total only when rows were actually withheld ([3019946](https://github.com/janfrl/mcp-abap-adt/commit/3019946))
+
+### 📖 Documentation
+
+- Correct where the config file is looked up ([737cb46](https://github.com/janfrl/mcp-abap-adt/commit/737cb46))
+- Document ExecuteQuery, the CSV output and allowFreeSql ([ffdc1a0](https://github.com/janfrl/mcp-abap-adt/commit/ffdc1a0))
+
+### ❤️ Contributors
+
+- Jan Fröhlich ([@janfrl](https://github.com/janfrl))
+
 ## [2.0.0] - 2026-08-06
 
 First release of the [janfrl](https://github.com/janfrl/mcp-abap-adt) fork,
