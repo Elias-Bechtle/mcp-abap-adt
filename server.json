@@ -54,6 +54,11 @@
           "isRequired": false
         },
         {
+          "name": "SAP_ALLOW_FREE_SQL",
+          "description": "Set to false to forbid ad-hoc SELECT statements through the ExecuteQuery tool. Allowed by default.",
+          "isRequired": false
+        },
+        {
           "name": "MCP_ABAP_ADT_CONFIG",
           "description": "Path to a configuration file declaring several named SAP systems",
           "isRequired": false

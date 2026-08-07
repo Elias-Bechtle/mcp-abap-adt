@@ -66,6 +66,7 @@ Setting all four of these gives you one system named `default`, which is what to
 | `SAP_CLIENT` | yes | Three digit client, e.g. `100` |
 | `SAP_LANGUAGE` | no | Logon language, e.g. `EN` |
 | `SAP_ALLOW_SELF_SIGNED` | no | `true` accepts self-signed or internally issued certificates |
+| `SAP_ALLOW_FREE_SQL` | no | `false` forbids ad-hoc SELECTs through `ExecuteQuery` |
 
 Every `SAP_*` variable sets one field of the system named `default`, and each has the same name and meaning as the corresponding config-file key.
 
@@ -124,6 +125,7 @@ Per-system options:
 | `passwordEnv` | — | Name of an environment variable holding the password |
 | `password` | — | Plaintext password. Works, but warns on startup. |
 | `allowSelfSigned` | `false` | Accept untrusted certificates for this system |
+| `allowFreeSql` | `true` | Allow `ExecuteQuery` to run ad-hoc SELECTs against this system |
 | `timeoutMs` | `30000` | Request timeout |
 | `authType` | `basic` | Only Basic authentication is implemented |
 
@@ -244,6 +246,7 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 | Tool | Description | Arguments |
 | --- | --- | --- |
 | `ListSystems` | List configured systems, the default, and configuration problems. Returns no credentials. | — |
+| `ExecuteQuery` | Run a read-only ABAP SQL SELECT, returned as CSV | `query`, `maxRows` (default 100, max 5000) |
 | `GetProgram` | ABAP program source | `program_name` |
 | `GetClass` | ABAP class source | `class_name` |
 | `GetInterface` | ABAP interface source | `interface_name` |
@@ -252,7 +255,7 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 | `GetInclude` | Include source | `include_name` |
 | `GetStructure` | DDIC structure | `structure_name` |
 | `GetTable` | Table structure | `table_name` |
-| `GetTableContents` | Table contents | `table_name`, `max_rows` (default 100) |
+| `GetTableContents` | All columns of a table, as CSV | `table_name`, `max_rows` (default 100, max 5000) |
 | `GetPackage` | Package contents | `package_name` |
 | `GetTypeInfo` | Domain or data element | `type_name` |
 | `GetCDSView` | CDS view (DDL source) | `cds_view_name` |
@@ -260,6 +263,21 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 | `SearchObject` | Quick search across objects | `query`, `maxResults` (default 100) |
 | `GetBehaviorDefinition` | RAP behavior definition (needs ~NW 7.54 / S/4HANA) | `behavior_definition_name` |
 | `GetServiceDefinition` | RAP service definition (needs ~NW 7.54 / S/4HANA) | `service_definition_name` |
+
+### Reading data
+
+`ExecuteQuery` runs a single ABAP SQL SELECT and returns CSV. Prefer it over `GetTableContents` whenever only part of a table is needed — projecting and filtering is what keeps an answer small:
+
+```
+SELECT carrid, connid FROM sflight WHERE carrid = 'LH'
+SELECT COUNT(*) AS cnt FROM t000
+```
+
+Dialect notes, since this is ABAP SQL and not the SQL you may expect: exactly one SELECT, no trailing semicolon, `ASCENDING`/`DESCENDING` instead of `ASC`/`DESC`, and no `LIMIT` clause — use the `maxRows` argument, which defaults to 100 and is capped at 5000.
+
+Nothing here can write. SAP embeds the statement in `... INTO TABLE @DATA(...) UP TO n ROWS`, so anything but a query is a syntax error; SAP rejects a second statement itself; and this server additionally requires the text to start with `SELECT` or `WITH`. Every query runs under the SAP authorisations of the configured user, which remains the real boundary on what can be read.
+
+To forbid ad-hoc queries against a system, set `"allowFreeSql": false` for it (or `SAP_ALLOW_FREE_SQL=false` for the environment-built one). Note what that actually achieves: `GetTableContents` still works and reads whole tables with `SELECT *`, so turning free SQL off makes a model read **more** data, not less. It is worth doing only where any unplanned query is unwelcome for its own sake.
 
 ## 7. Troubleshooting
 

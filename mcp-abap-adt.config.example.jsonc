@@ -44,6 +44,18 @@
       "keychain": true,
       "allowSelfSigned": true,
       "timeoutMs": 60000
+    },
+
+    // Forbid ad-hoc SELECTs through ExecuteQuery. Note the trade-off:
+    // GetTableContents still reads whole tables, so this makes a model read
+    // more data, not less. Worth it only where any unplanned query is
+    // unwelcome for its own sake.
+    "prd": {
+      "url": "https://prd.example.com:44300",
+      "client": "400",
+      "username": "DEVELOPER",
+      "keychain": true,
+      "allowFreeSql": false
     }
   }
 }
