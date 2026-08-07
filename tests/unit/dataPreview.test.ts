@@ -1,0 +1,139 @@
+import { describe, expect, it } from 'vitest';
+
+import { compactDataPreview, formatDataPreview, parseDataPreview } from '../../src/lib/dataPreview.js';
+
+/** Builds the column-oriented shape the ADT data preview really returns. */
+function tableData(columns: Array<{ name: string; values: string[] }>, extra = ''): string {
+  const blocks = columns
+    .map(
+      ({ name, values }) =>
+        `<dataPreview:columns><dataPreview:metadata dataPreview:name="${name}" dataPreview:type="C" ` +
+        `dataPreview:description="${name}" dataPreview:keyAttribute="false" dataPreview:colType="" ` +
+        `dataPreview:isKeyFigure="false"/><dataPreview:dataSet>` +
+        values.map((v) => (v === '' ? '<dataPreview:data/>' : `<dataPreview:data>${v}</dataPreview:data>`)).join('') +
+        `</dataPreview:dataSet></dataPreview:columns>`,
+    )
+    .join('');
+  return (
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<dataPreview:tableData xmlns:dataPreview="http://www.sap.com/adt/dataPreview">' +
+    extra +
+    blocks +
+    '</dataPreview:tableData>'
+  );
+}
+
+/** Trimmed from a real T000 response, including its empty ADRNR column. */
+const T000 = tableData(
+  [
+    { name: 'MANDT', values: ['000', '100'] },
+    { name: 'MTEXT', values: ['SAP AG', 'EWM Entwicklung'] },
+    { name: 'ADRNR', values: ['', ''] },
+    { name: 'LOGSYS', values: ['DWMCLNT000', 'DWMCLNT100'] },
+  ],
+  '<dataPreview:totalRows>2</dataPreview:totalRows>' +
+    '<dataPreview:executedQueryString>SELECT * FROM T000   INTO     TABLE @DATA(LT_RESULT)   UP TO 2  ROWS   .</dataPreview:executedQueryString>',
+);
+
+describe('parseDataPreview', () => {
+  it('transposes the column-oriented payload into rows', () => {
+    const result = parseDataPreview(T000);
+
+    expect(result?.columns).toEqual(['MANDT', 'MTEXT', 'ADRNR', 'LOGSYS']);
+    expect(result?.rows).toEqual([
+      ['000', 'SAP AG', '', 'DWMCLNT000'],
+      ['100', 'EWM Entwicklung', '', 'DWMCLNT100'],
+    ]);
+  });
+
+  it('keeps the executed query, collapsing the padding SAP adds', () => {
+    expect(parseDataPreview(T000)?.executedQuery).toBe('SELECT * FROM T000 INTO TABLE @DATA(LT_RESULT) UP TO 2 ROWS .');
+  });
+
+  it('handles a single column, which xml-js hands over as an object', () => {
+    const result = parseDataPreview(tableData([{ name: 'CARRID', values: ['LH', 'AA'] }]));
+
+    expect(result?.columns).toEqual(['CARRID']);
+    expect(result?.rows).toEqual([['LH'], ['AA']]);
+  });
+
+  it('handles a single row, likewise not an array', () => {
+    const result = parseDataPreview(
+      tableData([
+        { name: 'MANDT', values: ['100'] },
+        { name: 'MTEXT', values: ['only one'] },
+      ]),
+    );
+
+    expect(result?.rows).toEqual([['100', 'only one']]);
+  });
+
+  it('returns the columns and no rows for an empty result', () => {
+    const empty =
+      '<dataPreview:tableData xmlns:dataPreview="http://www.sap.com/adt/dataPreview">' +
+      '<dataPreview:columns><dataPreview:metadata dataPreview:name="MANDT"/><dataPreview:dataSet/></dataPreview:columns>' +
+      '</dataPreview:tableData>';
+
+    expect(parseDataPreview(empty)).toMatchObject({ columns: ['MANDT'], rows: [] });
+  });
+
+  it('gives up on a payload that is not a data preview', () => {
+    expect(parseDataPreview('<abap>source code</abap>')).toBeUndefined();
+    expect(parseDataPreview('not xml at all <<<')).toBeUndefined();
+  });
+});
+
+describe('formatDataPreview', () => {
+  it('renders a compact CSV with a header', () => {
+    expect(formatDataPreview(parseDataPreview(T000)!)).toBe(
+      [
+        '# SELECT * FROM T000 INTO TABLE @DATA(LT_RESULT) UP TO 2 ROWS .',
+        '# 2 rows',
+        'MANDT,MTEXT,ADRNR,LOGSYS',
+        '000,SAP AG,,DWMCLNT000',
+        '100,EWM Entwicklung,,DWMCLNT100',
+      ].join('\n'),
+    );
+  });
+
+  it('says so when the system reports more rows than it returned', () => {
+    const formatted = formatDataPreview({
+      columns: ['A'],
+      rows: [['1']],
+      totalRows: 4711,
+    });
+
+    expect(formatted).toContain('# 1 rows returned, 4711 total');
+  });
+
+  it('marks an empty result instead of ending after the header', () => {
+    const formatted = formatDataPreview({ columns: ['MANDT'], rows: [] });
+
+    expect(formatted).toBe(['# 0 rows', 'MANDT', '(no rows)'].join('\n'));
+  });
+
+  it('quotes cells that would otherwise break the CSV', () => {
+    const formatted = formatDataPreview({
+      columns: ['TEXT'],
+      rows: [['a,b'], ['say "hi"'], ['line\nbreak'], ['plain']],
+    });
+
+    // A quoted cell holding a newline spans two output lines, as RFC 4180 wants.
+    expect(formatted).toBe(['# 4 rows', 'TEXT', '"a,b"', '"say ""hi"""', '"line\nbreak"', 'plain'].join('\n'));
+  });
+});
+
+describe('compactDataPreview', () => {
+  it('shrinks a real payload by more than an order of magnitude', () => {
+    const compacted = compactDataPreview(T000);
+
+    expect(compacted.length).toBeLessThan(T000.length / 5);
+    expect(compacted).toContain('EWM Entwicklung');
+  });
+
+  it('falls back to the raw payload rather than failing on an unknown shape', () => {
+    const foreign = '<someOther:payload>data</someOther:payload>';
+
+    expect(compactDataPreview(foreign)).toBe(foreign);
+  });
+});

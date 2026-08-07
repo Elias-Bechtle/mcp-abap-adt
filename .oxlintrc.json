@@ -20,8 +20,8 @@
     "typescript/no-explicit-any": "off",
     // Used only directly after a canResolve() guard has proven the field set.
     "typescript/no-non-null-assertion": "off",
-    // _data and _text are property names ofetch and xml-js define, not ours.
-    "no-underscore-dangle": ["error", { "allow": ["_data", "_text"] }],
+    // _data, _text and _attributes are property names ofetch and xml-js define, not ours.
+    "no-underscore-dangle": ["error", { "allow": ["_data", "_text", "_attributes"] }],
     // Type-aware, but too strict here: this code bridges the type systems of
     // undici, ofetch and the MCP SDK, where deliberate casts are the seam.
     "typescript/no-unsafe-type-assertion": "off"
