@@ -210,6 +210,7 @@ describe('ConnectionRegistry', () => {
         authType: 'basic',
         credentialSource: 'inline',
         allowSelfSigned: false,
+        allowFreeSql: true,
         isDefault: true,
         origin: 'config-file',
       },

@@ -137,6 +137,46 @@ describe('allowSelfSigned from the environment', () => {
   });
 });
 
+describe('allowFreeSql', () => {
+  it('is on by default, because the alternative reads whole tables', async () => {
+    const config = await load(ENV_COMPLETE);
+
+    expect(config.systems.get('default')?.allowFreeSql).toBe(true);
+  });
+
+  it('is switched off by an explicit no in SAP_ALLOW_FREE_SQL', async () => {
+    const values = ['false', '0', 'no', 'FALSE'];
+
+    const configs = await Promise.all(values.map((value) => load({ ...ENV_COMPLETE, SAP_ALLOW_FREE_SQL: value })));
+
+    for (const [index, config] of configs.entries()) {
+      expect(config.systems.get('default')?.allowFreeSql, values[index]).toBe(false);
+    }
+  });
+
+  it('stays on for any other value, including an empty one', async () => {
+    const on = await load({ ...ENV_COMPLETE, SAP_ALLOW_FREE_SQL: '' });
+    expect(on.systems.get('default')?.allowFreeSql).toBe(true);
+
+    const alsoOn = await load({ ...ENV_COMPLETE, SAP_ALLOW_FREE_SQL: 'true' });
+    expect(alsoOn.systems.get('default')?.allowFreeSql).toBe(true);
+  });
+
+  it('can be turned off for a single imported system through an override', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'PRD', url: 'https://prd.example.com', client: '400' },
+    });
+    await writeConfig({ importFioriSystems: true, systems: { PRD: { allowFreeSql: false } } });
+    const config = await load();
+
+    expect(config.systems.get('PRD')).toMatchObject({
+      url: 'https://prd.example.com',
+      keychain: true,
+      allowFreeSql: false,
+    });
+  });
+});
+
 describe('config file', () => {
   const twoSystems = {
     defaultSystem: 'dev',

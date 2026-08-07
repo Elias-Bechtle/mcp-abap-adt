@@ -29,6 +29,13 @@ export const SystemConfigSchema = z.object({
   keychain: z.boolean().default(false),
   /** Accept self-signed / untrusted TLS certificates for this system only. */
   allowSelfSigned: z.boolean().default(false),
+  /**
+   * Allow the ExecuteQuery tool to run free SELECT statements against this
+   * system. On by default: the alternative is GetTableContents, which reads
+   * whole tables with SELECT *, so switching this off makes a model read more
+   * data rather than less. Turn it off where any ad-hoc query is unwelcome.
+   */
+  allowFreeSql: z.boolean().default(true),
   timeoutMs: z.number().int().positive().default(30_000),
 });
 

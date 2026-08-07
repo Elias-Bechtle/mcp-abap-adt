@@ -164,6 +164,13 @@ function readAllowSelfSigned(env: NodeJS.ProcessEnv): boolean {
   return legacy === '0' || legacy === 'false';
 }
 
+/** Unlike the others this one defaults to true, so only an explicit no counts. */
+function readAllowFreeSql(env: NodeJS.ProcessEnv): boolean {
+  const value = env.SAP_ALLOW_FREE_SQL?.trim().toLowerCase();
+  if (!value) return true;
+  return !(value === '0' || value === 'false' || value === 'no');
+}
+
 function applyEnvFallback(ctx: {
   env: NodeJS.ProcessEnv;
   systems: Map<string, ResolvedSystem>;
@@ -198,6 +205,7 @@ function applyEnvFallback(ctx: {
     username: env.SAP_USERNAME,
     password: env.SAP_PASSWORD,
     allowSelfSigned: readAllowSelfSigned(env),
+    allowFreeSql: readAllowFreeSql(env),
   });
 
   if (!parsed.success) {

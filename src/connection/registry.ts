@@ -20,6 +20,7 @@ export interface SystemInfo {
   authType: string;
   credentialSource: CredentialSource | 'none';
   allowSelfSigned: boolean;
+  allowFreeSql: boolean;
   isDefault: boolean;
   /** Where the system was defined, which is where a change has to be made. */
   origin: SystemOrigin;
@@ -87,6 +88,7 @@ export class ConnectionRegistry {
       authType: system.authType,
       credentialSource: credentialSourceOf(system, this.#providers) ?? 'none',
       allowSelfSigned: system.allowSelfSigned,
+      allowFreeSql: system.allowFreeSql,
       isDefault: name === this.config.defaultSystem,
       origin: system.origin,
     }));
