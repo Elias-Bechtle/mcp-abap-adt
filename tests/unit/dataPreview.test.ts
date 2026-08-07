@@ -104,14 +104,24 @@ describe('formatDataPreview', () => {
     );
   });
 
-  it('says so when the system reports more rows than it returned', () => {
-    const formatted = formatDataPreview({
-      columns: ['A'],
-      rows: [['1']],
-      totalRows: 4711,
-    });
+  it('says so when the system holds more rows than it returned', () => {
+    const formatted = formatDataPreview({ columns: ['A'], rows: [['1']], totalRows: 4711 });
 
-    expect(formatted).toContain('# 1 rows returned, 4711 total');
+    expect(formatted).toContain('# 1 of 4711 rows');
+  });
+
+  it('omits the total for an aggregate, where it is smaller than the result', () => {
+    // SELECT COUNT(*) returns one row while SAP reports the underlying match
+    // count, so "1 rows returned, 0 total" used to read as a contradiction.
+    const formatted = formatDataPreview({ columns: ['ZEILEN'], rows: [['0']], totalRows: 0 });
+
+    expect(formatted).toBe(['# 1 rows', 'ZEILEN', '0'].join('\n'));
+  });
+
+  it('omits the total when it merely repeats the row count', () => {
+    const formatted = formatDataPreview({ columns: ['A'], rows: [['1'], ['2']], totalRows: 2 });
+
+    expect(formatted).toContain('# 2 rows\n');
   });
 
   it('marks an empty result instead of ending after the header', () => {

@@ -83,11 +83,11 @@ export function formatDataPreview(result: DataPreviewResult): string {
   const lines: string[] = [];
   if (result.executedQuery) lines.push(`# ${result.executedQuery}`);
   const returned = result.rows.length;
-  lines.push(
-    result.totalRows !== undefined && result.totalRows !== returned
-      ? `# ${returned} rows returned, ${result.totalRows} total`
-      : `# ${returned} rows`,
-  );
+  // The total is only worth stating when it means "there is more than you got".
+  // For an aggregate SAP reports the underlying match count, which is often
+  // smaller than the one result row and then reads as a contradiction.
+  const hasMore = result.totalRows !== undefined && result.totalRows > returned;
+  lines.push(hasMore ? `# ${returned} of ${result.totalRows} rows` : `# ${returned} rows`);
   lines.push(result.columns.map(csvCell).join(','));
   if (returned === 0) {
     lines.push('(no rows)');
