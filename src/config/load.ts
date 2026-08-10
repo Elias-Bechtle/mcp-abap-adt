@@ -135,6 +135,11 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
       cwd: options.cwd,
       configFile: options.configFile ?? env.MCP_ABAP_ADT_CONFIG,
       dotenv: true,
+      // Also reads .mcp-abap-adtrc from the user's config directory, which is
+      // the only way to configure the server once for several MCP clients: a
+      // client spawns it with a filtered environment, so a machine-wide
+      // MCP_ABAP_ADT_CONFIG never arrives. rc files coerce types, which the
+      // client field allows for.
       globalRc: true,
       overrides,
     });

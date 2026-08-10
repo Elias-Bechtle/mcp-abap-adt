@@ -12,10 +12,20 @@ export type AuthType = (typeof AUTH_TYPES)[number];
 export const SystemConfigSchema = z.object({
   /** Base URL of the SAP system, e.g. https://vhcalnplci.dummy.nodomain:44300 */
   url: z.url(),
-  /** Three digit SAP client. Omitted means the system's default client is used. */
+  /**
+   * Three digit SAP client. Omitted means the system's default client is used.
+   *
+   * A number is accepted as well as a string, because rc files coerce types and
+   * would otherwise turn a written 100 into something the schema rejects. The
+   * conversion is lossless for every valid client: rc9 only makes a number of a
+   * value without a leading zero, and those survive String() unchanged, while
+   * 010 and 000 stay strings. A number that is not three digits still fails
+   * below rather than being padded into a different client.
+   */
   client: z
-    .string()
-    .regex(/^\d{3}$/, 'client must be a three digit SAP client, e.g. "100"')
+    .union([z.string(), z.number().int().nonnegative()])
+    .transform(String)
+    .refine((value) => /^\d{3}$/.test(value), 'client must be a three digit SAP client, e.g. "100"')
     .optional(),
   /** Two letter logon language, e.g. "EN". */
   language: z.string().min(1).optional(),

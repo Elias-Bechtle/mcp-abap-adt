@@ -323,6 +323,31 @@ describe('config file', () => {
     expect(config.errors[0].scope).toBe('system:broken');
   });
 
+  it('accepts a client written as a number, which an rc file coerces it into', async () => {
+    // rc9 turns an unquoted 100 into a number. Converting it back is lossless
+    // because it only coerces values without a leading zero: 010 stays a
+    // string, so no client is rebuilt from a number that lost a digit.
+    await writeConfig({
+      systems: {
+        coerced: { url: 'https://coerced.example.com', client: 100 },
+        leadingZero: { url: 'https://zero.example.com', client: '010' },
+      },
+    });
+    const config = await load();
+
+    expect(config.errors).toEqual([]);
+    expect(config.systems.get('coerced')?.client).toBe('100');
+    expect(config.systems.get('leadingZero')?.client).toBe('010');
+  });
+
+  it('rejects a number that is not a three digit client instead of padding it', async () => {
+    await writeConfig({ systems: { wide: { url: 'https://wide.example.com', client: 1000 } } });
+    const config = await load();
+
+    expect(config.systems.has('wide')).toBe(false);
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('three digit SAP client');
+  });
+
   it('reports an unknown defaultSystem but still serves the configured ones', async () => {
     await writeConfig({
       defaultSystem: 'nope',

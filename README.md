@@ -116,7 +116,23 @@ A file still earns its place once the configuration grows past a line or two —
 
 A file is optional — see above for the file-free route. Point at one explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work.
 
-Without an explicit path, the file is looked up as `mcp-abap-adt.config.*` in the **working directory the server is started in**. MCP clients rarely start it where you expect, so an absolute path via `--config` is the reliable choice; there is no lookup in your home directory.
+Without an explicit path, the file is looked up as `mcp-abap-adt.config.*` in the **working directory the server is started in**. MCP clients rarely start it where you expect, so an absolute path via `--config` is the reliable choice.
+
+#### One config for several MCP clients: `.mcp-abap-adtrc`
+
+Settings in a user-level `.mcp-abap-adtrc` apply to every client on the machine, which is otherwise not possible: a client spawns the server with a filtered environment, so a system-wide `MCP_ABAP_ADT_CONFIG` never reaches it and each client would need its own copy of the settings.
+
+The file lives in `$XDG_CONFIG_HOME` if you have that variable set, otherwise in your home directory. It holds flat `key=value` lines rather than JSON, nesting through dots:
+
+```ini
+defaultSystem=dev
+importFioriSystems=true
+systems.dev.url=https://dev.example.com:44300
+systems.dev.client=100
+systems.dev.keychain=true
+```
+
+A config file in the working directory, the environment and the command line all take precedence over it, in that order.
 
 ```jsonc
 {
