@@ -215,6 +215,15 @@ Credentials live in the Windows Credential Manager, the macOS Keychain or libsec
 
 If you already saved a system in **SAP Fiori tools**, you are done: set `"importFioriSystems": true` and the server picks up the system *and* its password. Systems using an authentication type other than basic are skipped with an explanatory message.
 
+It is off by default deliberately, rather than to save you a line. Turning it on gives a model read access to every system you have saved, production among them, and that is a decision to make rather than to inherit. To make it findable anyway, a server with nothing configured names the systems it could have adopted:
+
+```
+No SAP system is configured. 2 systems saved by the SAP Fiori tools VS Code
+extension could be used (DEV100, PRD400): set "importFioriSystems": true ...
+```
+
+Only the store's metadata is read for that, never a credential.
+
 Otherwise store the password yourself:
 
 ```bash

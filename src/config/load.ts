@@ -210,12 +210,55 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   if (systems.size === 0) {
     errors.push({
       scope: 'global',
-      message:
-        'No SAP system is configured. Create an mcp-abap-adt.config.jsonc file with a "systems" entry, set "importFioriSystems": true to adopt systems saved by the SAP Fiori tools VS Code extension, or set SAP_URL, SAP_USERNAME, SAP_PASSWORD and SAP_CLIENT.',
+      message: await describeNothingConfigured(app.importFioriSystems, options.homeDir),
     });
   }
 
   return { defaultSystem, systems, errors, sources };
+}
+
+/** Names at most this many systems before summarising the rest. */
+const HINT_LIMIT = 5;
+
+/**
+ * The message for a server with nothing to connect to.
+ *
+ * When importing was not asked for, this looks in the SAP Fiori tools store to
+ * report what is sitting there unused. Naming the systems is the difference
+ * between a wall of options and one that obviously applies. Adopting them
+ * without being asked would be something else entirely: it would hand a model
+ * read access to every system a developer has saved, production included, which
+ * is why `importFioriSystems` stays off by default.
+ *
+ * Only the store's metadata is read, never a credential; those live in the OS
+ * keychain and are fetched per system on its first request.
+ */
+async function describeNothingConfigured(importedAlready: boolean, homeDir?: string): Promise<string> {
+  const base = 'No SAP system is configured.';
+  const routes =
+    'Create an mcp-abap-adt.config.jsonc file with a "systems" entry, or set SAP_URL, SAP_USERNAME, SAP_PASSWORD and SAP_CLIENT.';
+
+  if (!importedAlready) {
+    const available = await findImportableSystems(homeDir);
+    if (available.length > 0) {
+      const shown = available.slice(0, HINT_LIMIT).join(', ');
+      const rest = available.length - HINT_LIMIT;
+      const listed = rest > 0 ? `${shown} and ${rest} more` : shown;
+      return `${base} ${available.length} system${available.length === 1 ? '' : 's'} saved by the SAP Fiori tools VS Code extension could be used (${listed}): set "importFioriSystems": true, or SAP_IMPORT_FIORI_SYSTEMS=true, to adopt them together with their stored passwords. ${routes}`;
+    }
+  }
+
+  return `${base} ${importedAlready ? routes : `Set "importFioriSystems": true to adopt systems saved by the SAP Fiori tools VS Code extension. ${routes}`}`;
+}
+
+/** A look, not a load: discovery problems are somebody else's message. */
+async function findImportableSystems(homeDir?: string): Promise<string[]> {
+  try {
+    const discovered = await discoverFioriSystems(homeDir);
+    return [...discovered.systems.keys()];
+  } catch {
+    return [];
+  }
 }
 
 function isTruthy(value: string): boolean {

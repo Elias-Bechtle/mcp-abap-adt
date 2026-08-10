@@ -93,6 +93,58 @@ describe('environment fallback', () => {
     expect(config.systems.size).toBe(0);
     expect(config.errors.map((e) => e.message).join('\n')).toContain('No SAP system is configured');
   });
+
+  it('names the Fiori systems going unused, so the fix is obvious', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'DEV100', url: 'https://dev.example.com', client: '100' },
+      b: { name: 'PRD400', url: 'https://prd.example.com', client: '400' },
+    });
+
+    const config = await load();
+    const message = config.errors.map((e) => e.message).join('\n');
+
+    expect(config.systems.size).toBe(0);
+    expect(message).toContain('2 systems saved by the SAP Fiori tools');
+    expect(message).toContain('DEV100');
+    expect(message).toContain('PRD400');
+    expect(message).toContain('importFioriSystems');
+  });
+
+  it('counts one system in the singular', async () => {
+    await writeFioriStore('.saptools', { a: { name: 'DEV100', url: 'https://dev.example.com', client: '100' } });
+
+    const config = await load();
+
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('1 system saved by');
+  });
+
+  it('summarises a long list rather than printing all of it', async () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 8 }, (_, index) => [
+        `k${index}`,
+        { name: `SYS${index}`, url: `https://s${index}.example.com`, client: '100' },
+      ]),
+    );
+    await writeFioriStore('.saptools', many);
+
+    const config = await load();
+    const message = config.errors.map((e) => e.message).join('\n');
+
+    expect(message).toContain('8 systems saved by');
+    expect(message).toContain('and 3 more');
+    expect(message).not.toContain('SYS7');
+  });
+
+  it('does not suggest importing when importing is already on', async () => {
+    // The store is empty here, so the suggestion would be a dead end.
+    await writeConfig({ importFioriSystems: true });
+
+    const config = await load();
+    const message = config.errors.map((e) => e.message).join('\n');
+
+    expect(message).toContain('No SAP system is configured');
+    expect(message).not.toContain('importFioriSystems');
+  });
 });
 
 describe('allowSelfSigned from the environment', () => {
