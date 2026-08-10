@@ -11,6 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "sourceMap": true,
+    "declaration": true,
     // The published package ships dist but not src, so a map referencing
     // ../src would resolve to nothing. Embedding the sources keeps the maps
     // self-contained, which is what makes a user's stack trace point at the

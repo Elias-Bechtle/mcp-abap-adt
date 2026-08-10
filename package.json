@@ -4,8 +4,12 @@
   "mcpName": "io.github.janfrl/mcp-abap-adt",
   "type": "module",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
   "bin": {
     "mcp-abap-adt": "dist/index.js"
