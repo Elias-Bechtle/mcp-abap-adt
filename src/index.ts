@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import { loadAppConfig, type AppConfigOverrides } from './config/load.js';
-import type { ConfigError } from './config/schema.js';
+import type { ConfigError, ResolvedAppConfig } from './config/schema.js';
 import { ConnectionRegistry } from './connection/registry.js';
 import { logWarn } from './lib/log.js';
 import { createServer } from './server.js';
@@ -90,8 +90,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   }
 
   const { overrides, errors: argErrors } = readCliOverrides(values);
-  const config = await loadAppConfig({ configFile, overrides });
-  for (const error of [...argErrors, ...config.errors]) {
+  const loaded = await loadAppConfig({ configFile, overrides });
+  // Argument errors join the configuration's own, or ListSystems would report
+  // only the consequence ("no system is configured") and never the cause. A
+  // client shows stderr to nobody, so logging them there is not enough.
+  const config: ResolvedAppConfig = { ...loaded, errors: [...argErrors, ...loaded.errors] };
+  for (const error of config.errors) {
     logWarn(`${error.scope}: ${error.message}`);
   }
 
