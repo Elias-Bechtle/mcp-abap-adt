@@ -10,6 +10,31 @@ onwards they are generated from conventional commits by
 [changelogen](https://github.com/unjs/changelogen) via `npm run release`, which
 is why the style changes further up the file.
 
+## v2.2.0
+
+[compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.1.0...v2.2.0)
+
+### 🚀 Features
+
+- **config:** Configure everything without a file ([71118bf](https://github.com/janfrl/mcp-abap-adt/commit/71118bf))
+- **config:** Accept a client that an rc file coerced into a number ([324674f](https://github.com/janfrl/mcp-abap-adt/commit/324674f))
+
+### 🩹 Fixes
+
+- **cli:** Report a malformed --config-json through ListSystems ([643325a](https://github.com/janfrl/mcp-abap-adt/commit/643325a))
+
+### 💅 Refactors
+
+- **config:** Let c12 apply the command line and environment layer ([3aff262](https://github.com/janfrl/mcp-abap-adt/commit/3aff262))
+
+### 📖 Documentation
+
+- Fix three stale or misplaced passages ([34ce1c4](https://github.com/janfrl/mcp-abap-adt/commit/34ce1c4))
+
+### ❤️ Contributors
+
+- Jan Fröhlich ([@janfrl](https://github.com/janfrl))
+
 ## v2.1.0
 
 [compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.0.0...v2.1.0)
