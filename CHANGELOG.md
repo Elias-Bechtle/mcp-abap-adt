@@ -10,6 +10,24 @@ onwards they are generated from conventional commits by
 [changelogen](https://github.com/unjs/changelogen) via `npm run release`, which
 is why the style changes further up the file.
 
+## v2.3.0
+
+[compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.2.0...v2.3.0)
+
+### 🚀 Features
+
+- **config:** Name the unused Fiori systems when nothing is configured ([4810cb4](https://github.com/janfrl/mcp-abap-adt/commit/4810cb4))
+
+### 📖 Documentation
+
+- Tell readers to use --scope user, and point at the rc file ([8bd7ffe](https://github.com/janfrl/mcp-abap-adt/commit/8bd7ffe))
+- Trim the note on Claude Code's server scopes ([04d06fc](https://github.com/janfrl/mcp-abap-adt/commit/04d06fc))
+- Lead the client examples with the keychain, not a plaintext password ([07977fb](https://github.com/janfrl/mcp-abap-adt/commit/07977fb))
+
+### ❤️ Contributors
+
+- Jan Fröhlich ([@janfrl](https://github.com/janfrl))
+
 ## v2.2.0
 
 [compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.1.0...v2.2.0)
