@@ -237,7 +237,9 @@ On-premise ADT does not accept OAuth bearer tokens. `/sap/bc/adt` is a plain ICF
 
 ## 5. Connecting an MCP client
 
-All clients follow the same shape. The examples show the simple single-system setup; to use several systems, drop the `env` block and configure them elsewhere.
+All clients follow the same shape: a command to run, and an `env` block for whatever the server should not have to look up itself.
+
+**The examples below keep the password out of the client's config**, because a password sitting in a shared or synced JSON file is the thing this fork exists to avoid. They rely on the OS keychain, which is filled either by the SAP Fiori tools VS Code extension or by `store-credentials` — see [Credentials](#4-credentials). The `SAP_*` variables with a plaintext password are shown after each one; they work, and for a throwaway sandbox they are the shortest thing that does.
 
 If you use more than one client — say Claude Desktop and Claude Code — put the systems in a [user-level `.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) and keep every client's entry down to `npx -y @janfr/mcp-abap-adt`. Then there is one place to change a system rather than one per client.
 
@@ -247,14 +249,24 @@ One thing cannot move there: `NODE_USE_SYSTEM_CA` and other `NODE_*` flags are N
 
 ```bash
 claude mcp add --scope user mcp-abap-adt \
+  --env SAP_IMPORT_FIORI_SYSTEMS=true \
+  -- npx -y @janfr/mcp-abap-adt
+```
+
+That adopts every system saved in SAP Fiori tools, with their passwords, and no credential is written anywhere. Call `ListSystems` afterwards to see what it found. For systems you saved with `store-credentials` instead, name them in a config file or an rc file and leave the `env` block off entirely.
+
+Keep `--scope user`, which registers the server for every directory; the default `local` ties it to the one you ran the command in. That is Claude Code's own behaviour rather than anything about this server — `claude mcp list` shows what the current directory has.
+
+Without a keychain entry, the four `SAP_*` variables describe one system directly, at the cost of a password in Claude Code's config file:
+
+```bash
+claude mcp add --scope user mcp-abap-adt \
   --env SAP_URL=https://sap.example.com:44300 \
   --env SAP_USERNAME=your_username \
   --env SAP_PASSWORD=your_password \
   --env SAP_CLIENT=100 \
   -- npx -y @janfr/mcp-abap-adt
 ```
-
-Keep `--scope user`, which registers the server for every directory; the default `local` ties it to the one you ran the command in. That is Claude Code's own behaviour rather than anything about this server — `claude mcp list` shows what the current directory has.
 
 Or commit a `.mcp.json` in your project root. Because that file is shared, reference variables rather than writing secrets into it — Claude Code expands `${VAR}`:
 
@@ -281,10 +293,7 @@ Settings → Developer → Edit Config, then add:
       "command": "npx",
       "args": ["-y", "@janfr/mcp-abap-adt"],
       "env": {
-        "SAP_URL": "https://sap.example.com:44300",
-        "SAP_USERNAME": "your_username",
-        "SAP_PASSWORD": "your_password",
-        "SAP_CLIENT": "100"
+        "SAP_IMPORT_FIORI_SYSTEMS": "true"
       }
     }
   }
@@ -292,6 +301,21 @@ Settings → Developer → Edit Config, then add:
 ```
 
 Restart Claude Desktop afterwards. On Windows, use `"command": "npx.cmd"` if `npx` is not found.
+
+This is the whole entry when the systems are in the keychain, and it does not change again when a system is added or a password rotates. With the settings in an rc file instead, even the `env` block goes away.
+
+The plaintext alternative, for a system that is not in the keychain:
+
+```json
+"env": {
+  "SAP_URL": "https://sap.example.com:44300",
+  "SAP_USERNAME": "your_username",
+  "SAP_PASSWORD": "your_password",
+  "SAP_CLIENT": "100"
+}
+```
+
+Note where that file lives: Claude Desktop's config is readable by anything running as you, and on a managed machine it may be backed up or synced.
 
 ### Cline
 
