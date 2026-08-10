@@ -74,9 +74,47 @@ Every `SAP_*` variable sets one field of the system named `default`, and each ha
 
 The variables can come from your MCP client's `env` block or from a `.env` file. Two locations are read: the directory the server is started in, and the package's own directory (where earlier versions kept it). A variable that is already set in the real environment wins over any `.env` file.
 
+### Without a file at all
+
+Every setting the config file accepts can also be given on the command line or through the environment, so the common setup needs no file:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "@janfr/mcp-abap-adt"],
+  "env": {
+    "NODE_USE_SYSTEM_CA": "1",
+    "SAP_IMPORT_FIORI_SYSTEMS": "true",
+    "SAP_DEFAULT_SYSTEM": "DWM100"
+  }
+}
+```
+
+| | Meaning |
+| --- | --- |
+| `SAP_IMPORT_FIORI_SYSTEMS` / `--import-fiori-systems` | Adopt the systems saved in SAP Fiori tools |
+| `SAP_DEFAULT_SYSTEM` / `--default-system <name>` | Which system a tool call uses when it names none |
+| `MCP_ABAP_ADT_CONFIG_JSON` / `--config-json '<json>'` | Any setting, including per-system ones |
+
+`MCP_ABAP_ADT_CONFIG_JSON` takes the same object a config file holds, which is what makes nested settings reachable. It is JSON rather than a set of flat variables on purpose: JSON carries its own types, so `client` stays the string `"100"` instead of becoming the number `100` and failing validation.
+
+Adjusting one imported system, without repeating its url and client:
+
+```json
+"env": {
+  "NODE_USE_SYSTEM_CA": "1",
+  "SAP_IMPORT_FIORI_SYSTEMS": "true",
+  "MCP_ABAP_ADT_CONFIG_JSON": "{\"systems\":{\"DNG001\":{\"allowSelfSigned\":true}}}"
+}
+```
+
+**Precedence** is command line over environment over file. `systems` merges entry by entry across the layers rather than replacing the whole map, so a later layer can adjust one system and leave the rest alone.
+
+A file still earns its place once the configuration grows past a line or two — it takes comments and does not need escaping.
+
 ### Config file (any number of systems)
 
-Point at the file explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work.
+A file is optional — see above for the file-free route. Point at one explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work.
 
 Without an explicit path, the file is looked up as `mcp-abap-adt.config.*` in the **working directory the server is started in**. MCP clients rarely start it where you expect, so an absolute path via `--config` is the reliable choice; there is no lookup in your home directory.
 

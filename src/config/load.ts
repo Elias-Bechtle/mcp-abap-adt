@@ -28,6 +28,78 @@ export interface LoadAppConfigOptions {
   env?: NodeJS.ProcessEnv;
   /** Home directory to search for the Fiori tools store (tests override this). */
   homeDir?: string;
+  /** Settings from the command line, which win over the file and the environment. */
+  overrides?: AppConfigOverrides;
+}
+
+/**
+ * Anything the config file can express, supplied without a file. JSON carries
+ * its own types, which a flat environment variable cannot: `client` has to stay
+ * the string "100" rather than becoming the number 100.
+ */
+export interface AppConfigOverrides {
+  defaultSystem?: string;
+  importFioriSystems?: boolean;
+  systems?: Record<string, unknown>;
+}
+
+function parseBoolean(value: string | undefined): boolean | undefined {
+  const normalised = value?.trim().toLowerCase();
+  if (!normalised) return undefined;
+  if (['1', 'true', 'yes'].includes(normalised)) return true;
+  if (['0', 'false', 'no'].includes(normalised)) return false;
+  return undefined;
+}
+
+/**
+ * Reads settings from the environment: the whole configuration as JSON in
+ * MCP_ABAP_ADT_CONFIG_JSON, plus flat variables for the two that are wanted
+ * often enough to deserve a short spelling of their own.
+ */
+function readEnvConfig(env: NodeJS.ProcessEnv, errors: ConfigError[], sources: string[]): AppConfigOverrides {
+  const overrides: AppConfigOverrides = {};
+
+  const json = env.MCP_ABAP_ADT_CONFIG_JSON?.trim();
+  if (json) {
+    try {
+      const parsed: unknown = JSON.parse(json);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('the value is not a JSON object');
+      }
+      Object.assign(overrides, parsed);
+      sources.push('MCP_ABAP_ADT_CONFIG_JSON');
+    } catch (error) {
+      errors.push({
+        scope: 'global',
+        message: `MCP_ABAP_ADT_CONFIG_JSON could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
+
+  const importFiori = parseBoolean(env.SAP_IMPORT_FIORI_SYSTEMS);
+  if (importFiori !== undefined) {
+    overrides.importFioriSystems = importFiori;
+    sources.push('SAP_IMPORT_FIORI_SYSTEMS');
+  }
+
+  const defaultSystem = env.SAP_DEFAULT_SYSTEM?.trim();
+  if (defaultSystem) {
+    overrides.defaultSystem = defaultSystem;
+    sources.push('SAP_DEFAULT_SYSTEM');
+  }
+
+  return overrides;
+}
+
+/** Later layers win, and `systems` merges per entry rather than wholesale. */
+function mergeConfigLayers(...layers: AppConfigOverrides[]): AppConfigOverrides {
+  const merged: AppConfigOverrides = {};
+  for (const layer of layers) {
+    if (layer.defaultSystem !== undefined) merged.defaultSystem = layer.defaultSystem;
+    if (layer.importFioriSystems !== undefined) merged.importFioriSystems = layer.importFioriSystems;
+    if (layer.systems) merged.systems = { ...merged.systems, ...layer.systems };
+  }
+  return merged;
 }
 
 function formatIssues(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
@@ -80,12 +152,18 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
     });
   }
 
-  const appParsed = AppConfigFileSchema.safeParse(rawConfig);
+  // Precedence: command line over environment over file. A file is therefore
+  // optional; the common setup needs none.
+  const fileLayer: AppConfigOverrides =
+    rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig) ? rawConfig : {};
+  const merged = mergeConfigLayers(fileLayer, readEnvConfig(env, errors, sources), options.overrides ?? {});
+
+  const appParsed = AppConfigFileSchema.safeParse(merged);
   const app = appParsed.success ? appParsed.data : { defaultSystem: undefined, importFioriSystems: false, systems: {} };
   if (!appParsed.success) {
     errors.push({
       scope: 'global',
-      message: `Invalid configuration file: ${formatIssues(appParsed.error)}`,
+      message: `Invalid configuration: ${formatIssues(appParsed.error)}`,
     });
   }
 

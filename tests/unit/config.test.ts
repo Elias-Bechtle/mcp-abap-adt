@@ -137,6 +137,103 @@ describe('allowSelfSigned from the environment', () => {
   });
 });
 
+describe('configuration without a file', () => {
+  it('takes the whole configuration from MCP_ABAP_ADT_CONFIG_JSON', async () => {
+    const config = await load({
+      MCP_ABAP_ADT_CONFIG_JSON: JSON.stringify({
+        defaultSystem: 'dev',
+        systems: { dev: { url: 'https://dev.example.com', client: '100', username: 'U', password: 'P' } },
+      }),
+    });
+
+    expect(config.errors).toEqual([]);
+    expect(config.defaultSystem).toBe('dev');
+    // JSON carries its own types, so the client stays a string rather than 100.
+    expect(config.systems.get('dev')).toMatchObject({ client: '100', origin: 'config-file' });
+  });
+
+  it('accepts the two common settings as flat variables', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'FIORI_DEV', url: 'https://fiori.example.com', client: '100' },
+    });
+    const config = await load({ SAP_IMPORT_FIORI_SYSTEMS: 'true', SAP_DEFAULT_SYSTEM: 'FIORI_DEV' });
+
+    expect(config.systems.get('FIORI_DEV')?.origin).toBe('fiori-tools');
+    expect(config.defaultSystem).toBe('FIORI_DEV');
+  });
+
+  it('reports malformed JSON instead of starting blind', async () => {
+    const config = await load({ MCP_ABAP_ADT_CONFIG_JSON: '{ not json' });
+
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('MCP_ABAP_ADT_CONFIG_JSON could not be read');
+  });
+
+  it('rejects a JSON value that is not an object', async () => {
+    const config = await load({ MCP_ABAP_ADT_CONFIG_JSON: '["a"]' });
+
+    expect(config.errors.map((e) => e.message).join('\n')).toContain('not a JSON object');
+  });
+
+  it('overrides an imported system without repeating it', async () => {
+    await writeFioriStore('.saptools', {
+      a: { name: 'DNG001', url: 'https://dng.example.com', client: '001' },
+    });
+    const config = await load({
+      SAP_IMPORT_FIORI_SYSTEMS: 'true',
+      MCP_ABAP_ADT_CONFIG_JSON: JSON.stringify({ systems: { DNG001: { allowSelfSigned: true } } }),
+    });
+
+    expect(config.systems.get('DNG001')).toMatchObject({
+      url: 'https://dng.example.com',
+      client: '001',
+      keychain: true,
+      allowSelfSigned: true,
+    });
+  });
+});
+
+describe('precedence between the layers', () => {
+  it('lets the environment win over the file', async () => {
+    await writeConfig({ defaultSystem: 'fromFile', systems: { fromFile: { url: 'https://a.example.com' } } });
+    const config = await load({
+      MCP_ABAP_ADT_CONFIG_JSON: JSON.stringify({ systems: { fromEnv: { url: 'https://b.example.com' } } }),
+      SAP_DEFAULT_SYSTEM: 'fromEnv',
+    });
+
+    // Systems merge per entry, so both survive; the default is the env one.
+    expect([...config.systems.keys()].toSorted()).toEqual(['fromEnv', 'fromFile']);
+    expect(config.defaultSystem).toBe('fromEnv');
+  });
+
+  it('lets the command line win over the environment', async () => {
+    const config = await loadAppConfig({
+      cwd: workDir,
+      homeDir,
+      env: {
+        SAP_DEFAULT_SYSTEM: 'fromEnv',
+        MCP_ABAP_ADT_CONFIG_JSON: JSON.stringify({
+          systems: { a: { url: 'https://a.example.com' }, b: { url: 'https://b.example.com' } },
+        }),
+      },
+      overrides: { defaultSystem: 'b' },
+    });
+
+    expect(config.defaultSystem).toBe('b');
+  });
+
+  it('merges a command-line override onto a system from the file', async () => {
+    await writeConfig({ systems: { dev: { url: 'https://dev.example.com', client: '100' } } });
+    const config = await loadAppConfig({
+      cwd: workDir,
+      homeDir,
+      env: {},
+      overrides: { systems: { dev: { url: 'https://dev.example.com', client: '100', allowFreeSql: false } } },
+    });
+
+    expect(config.systems.get('dev')).toMatchObject({ client: '100', allowFreeSql: false });
+  });
+});
+
 describe('allowFreeSql', () => {
   it('is on by default, because the alternative reads whole tables', async () => {
     const config = await load(ENV_COMPLETE);

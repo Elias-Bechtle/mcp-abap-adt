@@ -64,6 +64,21 @@
           "isRequired": false
         },
         {
+          "name": "MCP_ABAP_ADT_CONFIG_JSON",
+          "description": "The whole configuration as JSON, so no file is needed. Takes the same object a config file holds.",
+          "isRequired": false
+        },
+        {
+          "name": "SAP_IMPORT_FIORI_SYSTEMS",
+          "description": "Set to true to adopt the systems saved by the SAP Fiori tools VS Code extension",
+          "isRequired": false
+        },
+        {
+          "name": "SAP_DEFAULT_SYSTEM",
+          "description": "Name of the system used when a tool call omits the system argument",
+          "isRequired": false
+        },
+        {
           "name": "MCP_ABAP_ADT_DEBUG",
           "description": "Set to 1 for additional diagnostics on stderr",
           "isRequired": false

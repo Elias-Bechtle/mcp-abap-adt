@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { loadAppConfig } from './config/load.js';
+import { loadAppConfig, type AppConfigOverrides } from './config/load.js';
+import type { ConfigError } from './config/schema.js';
 import { ConnectionRegistry } from './connection/registry.js';
 import { logWarn } from './lib/log.js';
 import { createServer } from './server.js';
@@ -23,11 +24,50 @@ function loadPackageEnvFile(): void {
   }
 }
 
+/**
+ * Turns the command line into configuration overrides. A malformed value is
+ * reported rather than thrown: the server has to start so ListSystems can
+ * explain the problem.
+ */
+function readCliOverrides(values: Record<string, unknown>): {
+  overrides: AppConfigOverrides;
+  errors: ConfigError[];
+} {
+  const overrides: AppConfigOverrides = {};
+  const errors: ConfigError[] = [];
+
+  const json = typeof values['config-json'] === 'string' ? values['config-json'].trim() : '';
+  if (json) {
+    try {
+      const parsed: unknown = JSON.parse(json);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('the value is not a JSON object');
+      }
+      Object.assign(overrides, parsed);
+    } catch (error) {
+      errors.push({
+        scope: 'global',
+        message: `--config-json could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
+
+  if (values['import-fiori-systems'] === true) overrides.importFioriSystems = true;
+  if (typeof values['default-system'] === 'string' && values['default-system']) {
+    overrides.defaultSystem = values['default-system'];
+  }
+
+  return { overrides, errors };
+}
+
 export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
       config: { type: 'string' },
+      'config-json': { type: 'string' },
+      'import-fiori-systems': { type: 'boolean' },
+      'default-system': { type: 'string' },
       system: { type: 'string' },
       username: { type: 'string' },
     },
@@ -49,8 +89,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     return;
   }
 
-  const config = await loadAppConfig({ configFile });
-  for (const error of config.errors) {
+  const { overrides, errors: argErrors } = readCliOverrides(values);
+  const config = await loadAppConfig({ configFile, overrides });
+  for (const error of [...argErrors, ...config.errors]) {
     logWarn(`${error.scope}: ${error.message}`);
   }
 
