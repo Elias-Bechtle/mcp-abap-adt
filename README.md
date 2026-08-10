@@ -52,7 +52,7 @@ Then point your client at `node` with the absolute path to `dist/index.js`.
 
 ## 3. Configuring SAP systems
 
-There are two ways to configure systems, and they can be combined.
+There are four routes, and they combine: the `SAP_*` variables for a single system, the client's `env` block or command line for any setting without a file, a config file, and a user-level rc file that applies to every client on the machine. Precedence runs in that order, from the command line down to the rc file.
 
 ### Environment variables (single system)
 
@@ -96,7 +96,7 @@ Every setting the config file accepts can also be given on the command line or t
 | `SAP_DEFAULT_SYSTEM` / `--default-system <name>` | Which system a tool call uses when it names none |
 | `MCP_ABAP_ADT_CONFIG_JSON` / `--config-json '<json>'` | Any setting, including per-system ones |
 
-`MCP_ABAP_ADT_CONFIG_JSON` takes the same object a config file holds, which is what makes nested settings reachable. It is JSON rather than a set of flat variables on purpose: JSON carries its own types, so `client` stays the string `"100"` instead of becoming the number `100` and failing validation.
+`MCP_ABAP_ADT_CONFIG_JSON` takes the same object a config file holds, which is what makes nested settings reachable. It is JSON rather than a set of flat variables on purpose: JSON carries its own types, so a `client` of `"100"` stays a string and nothing has to guess whether `010` means the client `010` or the number ten.
 
 Adjusting one imported system, without repeating its url and client:
 
@@ -117,22 +117,6 @@ A file still earns its place once the configuration grows past a line or two —
 A file is optional — see above for the file-free route. Point at one explicitly with `--config <path>` or the `MCP_ABAP_ADT_CONFIG` environment variable. JSON, JSONC, YAML, TOML and `.ts` files all work.
 
 Without an explicit path, the file is looked up as `mcp-abap-adt.config.*` in the **working directory the server is started in**. MCP clients rarely start it where you expect, so an absolute path via `--config` is the reliable choice.
-
-#### One config for several MCP clients: `.mcp-abap-adtrc`
-
-Settings in a user-level `.mcp-abap-adtrc` apply to every client on the machine, which is otherwise not possible: a client spawns the server with a filtered environment, so a system-wide `MCP_ABAP_ADT_CONFIG` never reaches it and each client would need its own copy of the settings.
-
-The file lives in `$XDG_CONFIG_HOME` if you have that variable set, otherwise in your home directory. It holds flat `key=value` lines rather than JSON, nesting through dots:
-
-```ini
-defaultSystem=dev
-importFioriSystems=true
-systems.dev.url=https://dev.example.com:44300
-systems.dev.client=100
-systems.dev.keychain=true
-```
-
-A config file in the working directory, the environment and the command line all take precedence over it, in that order.
 
 ```jsonc
 {
@@ -184,6 +168,22 @@ Per-system options:
 | `authType` | `basic` | Only Basic authentication is implemented |
 
 **Which system is the default?** In order: the `defaultSystem` you declared, then a system named `default` created from the `SAP_*` variables, then the only system if there is exactly one. Otherwise every tool call must name a system, and calls that don't get an error listing the valid names.
+
+### One config for several MCP clients: `.mcp-abap-adtrc`
+
+Settings in a user-level `.mcp-abap-adtrc` apply to every client on the machine, which is otherwise not possible: a client spawns the server with a filtered environment, so a system-wide `MCP_ABAP_ADT_CONFIG` never reaches it and each client would need its own copy of the settings.
+
+The file lives in `$XDG_CONFIG_HOME` if you have that variable set, otherwise in your home directory. It holds flat `key=value` lines rather than JSON, nesting through dots:
+
+```ini
+defaultSystem=dev
+importFioriSystems=true
+systems.dev.url=https://dev.example.com:44300
+systems.dev.client=100
+systems.dev.keychain=true
+```
+
+Everything else — a config file in the working directory, the environment, the command line — takes precedence over it, in that order.
 
 ### Adjusting an imported system
 
