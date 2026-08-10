@@ -1,4 +1,5 @@
 import { loadConfig } from 'c12';
+import { defu } from 'defu';
 
 import { logWarn } from '../lib/log.js';
 import { discoverFioriSystems } from './fiori.js';
@@ -91,17 +92,6 @@ function readEnvConfig(env: NodeJS.ProcessEnv, errors: ConfigError[], sources: s
   return overrides;
 }
 
-/** Later layers win, and `systems` merges per entry rather than wholesale. */
-function mergeConfigLayers(...layers: AppConfigOverrides[]): AppConfigOverrides {
-  const merged: AppConfigOverrides = {};
-  for (const layer of layers) {
-    if (layer.defaultSystem !== undefined) merged.defaultSystem = layer.defaultSystem;
-    if (layer.importFioriSystems !== undefined) merged.importFioriSystems = layer.importFioriSystems;
-    if (layer.systems) merged.systems = { ...merged.systems, ...layer.systems };
-  }
-  return merged;
-}
-
 function formatIssues(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
   return error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; ');
 }
@@ -132,14 +122,21 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   const sources: string[] = [];
   const systems = new Map<string, ResolvedSystem>();
 
+  // Precedence: command line over environment over file. c12 applies
+  // `overrides` above every discovered layer and merges with defu, which is a
+  // deep merge, so `systems` combines entry by entry rather than being
+  // replaced. A file is therefore optional; the common setup needs none.
+  const overrides = defu(options.overrides ?? {}, readEnvConfig(env, errors, sources));
+
   let rawConfig: unknown = {};
   try {
-    const loaded = await loadConfig({
+    const loaded = await loadConfig<AppConfigOverrides>({
       name: CONFIG_NAME,
       cwd: options.cwd,
       configFile: options.configFile ?? env.MCP_ABAP_ADT_CONFIG,
       dotenv: true,
       globalRc: true,
+      overrides,
     });
     rawConfig = loaded.config ?? {};
     for (const layer of loaded.layers ?? []) {
@@ -148,17 +145,13 @@ export async function loadAppConfig(options: LoadAppConfigOptions = {}): Promise
   } catch (error) {
     errors.push({
       scope: 'global',
-      message: `Could not read the configuration file: ${error instanceof Error ? error.message : String(error)}`,
+      message: `Could not read the configuration: ${error instanceof Error ? error.message : String(error)}`,
     });
+    // Losing the file must not lose the command line and the environment too.
+    rawConfig = overrides;
   }
 
-  // Precedence: command line over environment over file. A file is therefore
-  // optional; the common setup needs none.
-  const fileLayer: AppConfigOverrides =
-    rawConfig && typeof rawConfig === 'object' && !Array.isArray(rawConfig) ? rawConfig : {};
-  const merged = mergeConfigLayers(fileLayer, readEnvConfig(env, errors, sources), options.overrides ?? {});
-
-  const appParsed = AppConfigFileSchema.safeParse(merged);
+  const appParsed = AppConfigFileSchema.safeParse(rawConfig);
   const app = appParsed.success ? appParsed.data : { defaultSystem: undefined, importFioriSystems: false, systems: {} };
   if (!appParsed.success) {
     errors.push({
