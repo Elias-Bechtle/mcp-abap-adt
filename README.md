@@ -237,18 +237,24 @@ On-premise ADT does not accept OAuth bearer tokens. `/sap/bc/adt` is a plain ICF
 
 ## 5. Connecting an MCP client
 
-All clients follow the same shape. The examples show the simple single-system setup; to use several systems, drop the `env` block and add a config file instead.
+All clients follow the same shape. The examples show the simple single-system setup; to use several systems, drop the `env` block and configure them elsewhere.
+
+If you use more than one client — say Claude Desktop and Claude Code — put the systems in a [user-level `.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) and keep every client's entry down to `npx -y @janfr/mcp-abap-adt`. Then there is one place to change a system rather than one per client.
+
+One thing cannot move there: `NODE_USE_SYSTEM_CA` and other `NODE_*` flags are Node's own, not settings of this server, and a client passes on only a short list of variables. Those stay in each client's `env` block.
 
 ### Claude Code
 
 ```bash
-claude mcp add mcp-abap-adt \
+claude mcp add --scope user mcp-abap-adt \
   --env SAP_URL=https://sap.example.com:44300 \
   --env SAP_USERNAME=your_username \
   --env SAP_PASSWORD=your_password \
   --env SAP_CLIENT=100 \
   -- npx -y @janfr/mcp-abap-adt
 ```
+
+**Do not leave out `--scope user`.** The default is `local`, which binds the server to the directory you happened to run the command in: start `claude` anywhere else and the SAP tools are simply absent, with nothing to explain their disappearance. `claude mcp list` shows what the current directory actually has. `--scope project` is the other useful one — it writes a `.mcp.json` for the whole team, described next.
 
 Or commit a `.mcp.json` in your project root. Because that file is shared, reference variables rather than writing secrets into it — Claude Code expands `${VAR}`:
 
