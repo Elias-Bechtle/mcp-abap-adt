@@ -7,6 +7,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { HERMETIC_HOME } from '../setup/hermeticHome.js';
+
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const entryPoint = join(repoRoot, 'dist', 'index.js');
 
@@ -35,9 +37,18 @@ async function startServer(args: string[] = []) {
     command: process.execPath,
     args: [entryPoint, ...args],
     // A hermetic environment and working directory: the developer's own
-    // SAP_* variables and config file must not reach this server.
+    // SAP_* variables and config file must not reach this server. The home
+    // variables are redirected rather than dropped, because Node resolves a
+    // home directory from the OS when they are absent, which would let a real
+    // .mcp-abap-adtrc into the assertions.
     cwd: workDir,
-    env: { PATH: process.env.PATH ?? '', SystemRoot: process.env.SystemRoot ?? '' },
+    env: {
+      PATH: process.env.PATH ?? '',
+      SystemRoot: process.env.SystemRoot ?? '',
+      HOME: HERMETIC_HOME,
+      USERPROFILE: HERMETIC_HOME,
+      XDG_CONFIG_HOME: HERMETIC_HOME,
+    },
     stderr: 'pipe',
   });
 
