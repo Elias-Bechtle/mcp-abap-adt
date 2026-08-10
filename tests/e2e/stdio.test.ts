@@ -110,7 +110,14 @@ describe.skipIf(!built)('server over stdio', () => {
       JSON.stringify({
         defaultSystem: 'sandbox',
         systems: {
-          sandbox: { url: 'https://sandbox.example.com:44300', client: '001', username: 'U', password: 'P' },
+          sandbox: {
+            url: 'https://sandbox.example.com:44300',
+            client: '001',
+            username: 'U',
+            // Distinctive on purpose: the assertion below is only worth
+            // anything if this string could actually show up in the output.
+            password: 'top-secret',
+          },
           broken: { url: 'https://broken.example.com', client: 'XX' },
         },
       }),
@@ -119,7 +126,8 @@ describe.skipIf(!built)('server over stdio', () => {
 
     const { client, readStderr } = await startServer(['--config', configFile]);
 
-    const payload = JSON.parse(firstText(await client.callTool({ name: 'ListSystems', arguments: {} }))) as {
+    const text = firstText(await client.callTool({ name: 'ListSystems', arguments: {} }));
+    const payload = JSON.parse(text) as {
       defaultSystem: string;
       systems: Array<{ name: string; origin: string }>;
       configErrors: Array<{ scope: string }>;
@@ -132,11 +140,62 @@ describe.skipIf(!built)('server over stdio', () => {
     expect(payload.configErrors.map((error) => error.scope)).toContain('system:broken');
     // Reaching this point already proves stdout carried only JSON-RPC, since
     // the client would have failed to parse the stream otherwise.
-    expect(firstText(await client.callTool({ name: 'ListSystems', arguments: {} }))).not.toContain('top-secret');
+    expect(text).not.toContain('top-secret');
 
     await client.close();
     // The plaintext-password warning belongs on stderr, where it cannot
     // corrupt the protocol.
     expect(readStderr()).toContain('plaintext password');
+  });
+
+  /**
+   * The command line is the file-free route, and readCliOverrides is not
+   * exported. Driving the real process is the honest level for it: it covers
+   * the parseArgs wiring as well as the parsing.
+   */
+  describe('command line overrides', () => {
+    const twoSystems = JSON.stringify({
+      systems: {
+        alpha: { url: 'https://alpha.example.com', client: '100' },
+        beta: { url: 'https://beta.example.com', client: '200' },
+      },
+    });
+
+    it('takes whole systems from --config-json, with no file anywhere', async () => {
+      const { client } = await startServer(['--config-json', twoSystems]);
+
+      const payload = JSON.parse(firstText(await client.callTool({ name: 'ListSystems', arguments: {} }))) as {
+        systems: Array<{ name: string; client: string }>;
+      };
+
+      expect(payload.systems.map((entry) => entry.name).toSorted()).toEqual(['alpha', 'beta']);
+      // A number here would mean the JSON route lost the type it exists to keep.
+      expect(payload.systems.every((entry) => entry.client === '100' || entry.client === '200')).toBe(true);
+      await client.close();
+    });
+
+    it('picks the default with --default-system', async () => {
+      const { client } = await startServer(['--config-json', twoSystems, '--default-system', 'beta']);
+
+      const payload = JSON.parse(firstText(await client.callTool({ name: 'ListSystems', arguments: {} }))) as {
+        defaultSystem: string;
+      };
+
+      expect(payload.defaultSystem).toBe('beta');
+      await client.close();
+    });
+
+    it('reports malformed --config-json instead of refusing to start', async () => {
+      const { client } = await startServer(['--config-json', '{ not json']);
+
+      const payload = JSON.parse(firstText(await client.callTool({ name: 'ListSystems', arguments: {} }))) as {
+        configErrors: Array<{ message: string }>;
+      };
+
+      expect(payload.configErrors.map((error) => error.message).join('\n')).toContain(
+        '--config-json could not be read',
+      );
+      await client.close();
+    });
   });
 });
