@@ -254,7 +254,7 @@ claude mcp add --scope user mcp-abap-adt \
   -- npx -y @janfr/mcp-abap-adt
 ```
 
-**Do not leave out `--scope user`.** The default is `local`, which binds the server to the directory you happened to run the command in: start `claude` anywhere else and the SAP tools are simply absent, with nothing to explain their disappearance. `claude mcp list` shows what the current directory actually has. `--scope project` is the other useful one — it writes a `.mcp.json` for the whole team, described next.
+Keep `--scope user`, which registers the server for every directory; the default `local` ties it to the one you ran the command in. That is Claude Code's own behaviour rather than anything about this server — `claude mcp list` shows what the current directory has.
 
 Or commit a `.mcp.json` in your project root. Because that file is shared, reference variables rather than writing secrets into it — Claude Code expands `${VAR}`:
 
