@@ -17,8 +17,7 @@ This is a fork of [mario-andreschak/mcp-abap-adt](https://github.com/mario-andre
 5. [Connecting an MCP client](#5-connecting-an-mcp-client)
 6. [Available tools](#6-available-tools)
 7. [Troubleshooting](#7-troubleshooting)
-8. [Migrating from mario-andreschak/mcp-abap-adt](#8-migrating-from-mario-andreschakmcp-abap-adt)
-9. [Development](#9-development)
+8. [Further reading](#8-further-reading)
 
 ## 1. Requirements
 
@@ -52,7 +51,16 @@ Then point your client at `node` with the absolute path to `dist/index.js`.
 
 ## 3. Configuring SAP systems
 
-There are four routes, and they combine: the `SAP_*` variables for a single system, the client's `env` block or command line for any setting without a file, a config file, and a user-level rc file that applies to every client on the machine. Precedence runs in that order, from the command line down to the rc file.
+**Read the one row that describes you.** The rest of this section is detail on each route, not a sequence to work through.
+
+| If you want | Use | Below |
+| --- | --- | --- |
+| One system, to try this out | the four `SAP_*` variables in your client's `env` block | [Environment variables](#environment-variables-single-system) |
+| To adopt what SAP Fiori tools already knows | `SAP_IMPORT_FIORI_SYSTEMS=true`, nothing else | [Any setting without a file](#any-setting-without-a-file) |
+| Several systems, with comments | a config file | [Config file](#config-file-any-number-of-systems) |
+| One setup for several MCP clients | a user-level rc file | [`.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) |
+
+The routes combine, and precedence runs command line → environment → config file → rc file. Wherever they overlap, `systems` merges entry by entry rather than replacing the whole set, so one route can adjust a single system and leave the rest alone.
 
 ### Environment variables (single system)
 
@@ -74,7 +82,7 @@ Every `SAP_*` variable sets one field of the system named `default`, and each ha
 
 The variables can come from your MCP client's `env` block or from a `.env` file. Two locations are read: the directory the server is started in, and the package's own directory (where earlier versions kept it). A variable that is already set in the real environment wins over any `.env` file.
 
-### Without a file at all
+### Any setting without a file
 
 Every setting the config file accepts can also be given on the command line or through the environment, so the common setup needs no file:
 
@@ -107,8 +115,6 @@ Adjusting one imported system, without repeating its url and client:
   "MCP_ABAP_ADT_CONFIG_JSON": "{\"systems\":{\"DNG001\":{\"allowSelfSigned\":true}}}"
 }
 ```
-
-**Precedence** is command line over environment over file. `systems` merges entry by entry across the layers rather than replacing the whole map, so a later layer can adjust one system and leave the rest alone.
 
 A file still earns its place once the configuration grows past a line or two — it takes comments and does not need escaping.
 
@@ -426,103 +432,10 @@ The inspector spawns the server the same way a real MCP client does, **including
 npm run inspect:cli -- -e NODE_USE_SYSTEM_CA=1 --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
 ```
 
-## 8. Migrating from mario-andreschak/mcp-abap-adt
+## 8. Further reading
 
-This fork continues from [mario-andreschak/mcp-abap-adt](https://github.com/mario-andreschak/mcp-abap-adt) 1.2.0. All 16 tools keep their names and arguments, so prompts and workflows built against the original keep working.
-
-### The minimum change
-
-Point your MCP client at the new package name. Everything else can stay as it is:
-
-```diff
- {
-   "mcpServers": {
-     "mcp-abap-adt": {
-       "command": "npx",
--      "args": ["-y", "mcp-abap-adt"],
-+      "args": ["-y", "@janfr/mcp-abap-adt"],
-       "env": {
-         "SAP_URL": "https://sap.example.com:44300",
-         "SAP_USERNAME": "your_username",
-         "SAP_PASSWORD": "your_password",
-         "SAP_CLIENT": "100"
-       }
-     }
-   }
- }
-```
-
-Your four `SAP_*` variables continue to work and now describe a system named `default`, which every tool call uses unless it names another one.
-
-### What can break, and what to do about it
-
-| Change | Symptom | Fix |
-| --- | --- | --- |
-| Certificates are verified | `TLS certificate verification failed ... (SELF_SIGNED_CERT_IN_CHAIN)` on the first tool call | Add `SAP_ALLOW_SELF_SIGNED=true` to the `env` block, or `"allowSelfSigned": true` to the system in a config file |
-| Node.js 22 or newer required | The server fails to start | Update Node.js; the package is also ESM-only now |
-| Package renamed | The old name keeps installing the original project | Use `@janfr/mcp-abap-adt` |
-| `SAP_LANGUAGE` is honoured | ABAP texts arrive in a different language than before | Remove the variable, or set it to the language you want |
-
-The certificate change is the one that will actually bite you. Version 1.2.0 passed `rejectUnauthorized: false` on every request and never read the `TLS_REJECT_UNAUTHORIZED` variable it documented, so **no** certificate was ever checked. Verification is now on by default and can be switched off per system.
-
-`SAP_LANGUAGE` has the same history: documented, never read. Requests that used to run in the user's default logon language now use the configured one.
-
-### Worth adopting afterwards
-
-None of this is required, but it is why the fork exists:
-
-1. **Several systems at once.** Replace the `env` block with a [config file](#config-file-any-number-of-systems) and pass `system` on a tool call to pick one. `ListSystems` shows what the server resolved.
-2. **No password in a file.** If you use the SAP Fiori tools VS Code extension, set `"importFioriSystems": true` and your saved systems, including their passwords, are picked up from the OS keychain. Otherwise run `mcp-abap-adt store-credentials --system <name>` once. See [Credentials](#4-credentials).
-3. **Drop the `.env` file.** It still works from the package directory and the working directory, but a config file with keychain credentials leaves no secret on disk.
-
-### Also fixed along the way
-
-- `GetPackage` encoded the package name twice, which broke namespaced packages such as `/DMO/FLIGHT`.
-- Cookies were sent back including their attributes rather than as `name=value` pairs.
-- Build tooling (TypeScript, Jest) shipped in `dependencies` and was installed at runtime by every `npx` invocation.
-- The server reported itself as version `0.1.0` regardless of the released version.
-- A missing environment variable killed the process before the MCP handshake, which clients could only show as an opaque startup failure. Configuration problems are now reported through `ListSystems`.
-
-## 9. Development
-
-```bash
-npm install
-npm run build        # compile to dist/
-npm test             # unit tests, no SAP system needed
-npm run typecheck
-npm run lint         # oxlint, including type-aware rules
-npm run lint:fix
-npm run fmt          # oxfmt; fmt:check verifies without writing
-npm run inspect      # build, then the MCP Inspector web UI
-npm run inspect:cli  # same without a browser, see Troubleshooting for examples
-```
-
-### Releasing
-
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/), because the release is derived from them:
-
-```bash
-npm run release          # changelogen: bump, update CHANGELOG.md, commit, tag
-git push --follow-tags
-npm publish
-```
-
-`changelogen --release --clean` refuses to run on a dirty working tree, works out the semver bump from the commits since the last tag, and writes the new section into `CHANGELOG.md`. It does not push, so there is a moment to review the commit and tag before anything leaves the machine.
-
-The `changelog.types` map in `package.json` hides `test`, `style` and `ci` commits: they cannot change anything for someone installing the package, so they do not belong in its changelog. Breaking changes are collected into their own section regardless of type, from either a `!` marker or a `BREAKING CHANGE:` footer.
-
-Two dependencies are deliberately held back, so a routine "everything to latest" pass does not undo them. `@types/node` tracks the oldest supported Node (the `engines` floor of 22) rather than the newest that exists: typing against a newer major would let the compiler accept APIs that are missing at runtime on that floor. `c12` stays on its 3.x line because 4.x is still a prerelease.
-
-The inspector is run through `npx` rather than installed: it pulls in React, Vite and around twenty other packages that CI would otherwise download on every matrix job for a tool CI never uses. The major version is pinned in the script, because the argument order changed between its 1.x and 2.x lines.
-
-The unit tests mock HTTP and the keychain, so they run anywhere. The integration suite talks to a real system and is opt-in:
-
-```bash
-RUN_INTEGRATION=1 npm test               # bash
-$env:RUN_INTEGRATION='1'; npm test       # PowerShell
-```
-
-Set `INTEGRATION_SYSTEM` to target a specific configured system.
+- **[Migrating from mario-andreschak/mcp-abap-adt](MIGRATION.md)** — what changes for a 1.x setup, what can break, and the one-line minimum change. All 16 original tools keep their names and arguments.
+- **[Contributing](CONTRIBUTING.md)** — the build, test and release commands, and why a few tooling choices are the way they are.
 
 ## License
 
