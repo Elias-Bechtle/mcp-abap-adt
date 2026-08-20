@@ -97,6 +97,15 @@ export class SapConnection {
     // The credentials are usually still valid, so the dead session is dropped
     // and the call retried exactly once - more attempts would only feed the
     // failed-logon counter of a user whose password really did change.
+    //
+    // Whether a dead session produces a 401 at all is a system setting. It was
+    // reported from one NetWeaver system, where it left every further call
+    // answering with the logon page until the server restarted. On another it
+    // could not be provoked: neither /sap/public/bc/icf/logoff nor a
+    // deliberately corrupted session id stopped ICF from re-authenticating via
+    // Basic auth and issuing a fresh session. So this path stays inert where
+    // the behaviour does not occur, and the fakes in connection.test.ts are
+    // what pin its logic down.
     const hadSession = this.#cookies.size > 0;
     try {
       return await this.#requestOnce(path, options);
