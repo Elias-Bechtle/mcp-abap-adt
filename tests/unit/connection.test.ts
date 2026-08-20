@@ -138,6 +138,36 @@ describe('CSRF handling', () => {
     expect(calls.filter((call) => call.method === 'POST')).toHaveLength(3);
   });
 
+  it('names authorization as the cause when the token request gets 403', async () => {
+    const { connection } = connect((call) =>
+      call.headers['x-csrf-token'] === 'fetch'
+        ? { status: 403, body: 'No authorization to access resource /sap/bc/adt/datapreview/freestyle' }
+        : { body: 'unreachable' },
+    );
+
+    const attempt = connection.request('/sap/bc/adt/datapreview/freestyle', { method: 'POST', body: 'q' });
+
+    await expect(attempt).rejects.toThrow(/authorization result, not a token problem/);
+    await expect(attempt).rejects.toThrow(/Gateway hub/);
+  });
+
+  it('lets a 401 during the token request reach the session recovery', async () => {
+    const { connection, calls } = connect((call, index) => {
+      if (index === 0) return { body: 'ok', setCookie: ['SESSION=alive; Path=/'] };
+      if (call.headers['x-csrf-token'] === 'fetch') {
+        // The first token request hits the dead session; the second succeeds.
+        return index === 1 ? { status: 401, body: 'logon page' } : { headers: { 'x-csrf-token': 'FRESH' } };
+      }
+      return { body: 'recovered' };
+    });
+
+    await connection.request('/sap/bc/adt/x');
+    const response = await connection.request('/sap/bc/adt/y', { method: 'POST', body: 'q' });
+
+    expect(response.data).toBe('recovered');
+    expect(calls.at(-1)?.headers['x-csrf-token']).toBe('FRESH');
+  });
+
   it('gives up rather than retrying forever', async () => {
     const { connection } = connect((call) =>
       call.headers['x-csrf-token'] === 'fetch'

@@ -178,10 +178,25 @@ export class SapConnection {
       if (token) return token;
       throw new Error('the response carried no x-csrf-token header');
     } catch (error) {
-      // A rejected fetch still carries a usable token often enough to matter.
       if (error instanceof AdtHttpError) {
+        // A rejected fetch still carries a usable token often enough to matter.
         const token = error.headers?.get('x-csrf-token');
         if (token) return token;
+        // A 403 without a token is an authorization answer, not a token
+        // problem. Wrapping it as "could not obtain a CSRF token" once sent a
+        // user chasing a connection issue when the endpoint simply did not
+        // exist on their Gateway hub.
+        if (error.status === 403) {
+          throw new Error(
+            `System "${this.name}" answered 403 for ${path}. That is an authorization result, not a token problem: ` +
+              'the user may lack ADT authorization for this endpoint, or the system does not offer it at all ' +
+              `(a Gateway hub, for example).${error.body ? ` SAP said: ${error.body}` : ''}`,
+            { cause: error },
+          );
+        }
+        // Everything else keeps its shape - above all a 401, which the session
+        // recovery in request() has to recognise.
+        throw error;
       }
       throw new Error(
         `Could not obtain a CSRF token for system "${this.name}": ${error instanceof Error ? error.message : String(error)}`,
