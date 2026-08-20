@@ -6,6 +6,12 @@ export interface DataPreviewResult {
   /** Rows the system reports for the query, which can exceed the rows returned. */
   totalRows?: number;
   executedQuery?: string;
+  /**
+   * Database execution time in milliseconds. The unit was established
+   * empirically: a COUNT(*) over 17 million rows reported 7.1 while the whole
+   * HTTP round trip took 159 ms, which only database-side milliseconds fit.
+   */
+  executionTimeMs?: number;
 }
 
 /** xml-js compact mode collapses a single child to an object rather than an array. */
@@ -66,11 +72,15 @@ export function parseDataPreview(xml: string): DataPreviewResult | undefined {
   const totalRows = totalRowsText === '' ? Number.NaN : Number(totalRowsText);
   const executedQuery = textOf(table['dataPreview:executedQueryString']).replace(/\s+/gu, ' ').trim();
 
+  const executionTimeText = textOf(table['dataPreview:queryExecutionTime']);
+  const executionTimeMs = executionTimeText === '' ? Number.NaN : Number(executionTimeText);
+
   return {
     columns,
     rows,
     totalRows: Number.isFinite(totalRows) ? totalRows : undefined,
     executedQuery: executedQuery || undefined,
+    executionTimeMs: Number.isFinite(executionTimeMs) ? executionTimeMs : undefined,
   };
 }
 
@@ -87,7 +97,10 @@ export function formatDataPreview(result: DataPreviewResult): string {
   // For an aggregate SAP reports the underlying match count, which is often
   // smaller than the one result row and then reads as a contradiction.
   const hasMore = result.totalRows !== undefined && result.totalRows > returned;
-  lines.push(hasMore ? `# ${returned} of ${result.totalRows} rows` : `# ${returned} rows`);
+  // The execution time lets the caller judge before the next attempt whether
+  // a query needs a tighter filter - it was asked for by exactly that reader.
+  const took = result.executionTimeMs === undefined ? '' : ` (db time ${result.executionTimeMs} ms)`;
+  lines.push(hasMore ? `# ${returned} of ${result.totalRows} rows${took}` : `# ${returned} rows${took}`);
   lines.push(result.columns.map(csvCell).join(','));
   if (returned === 0) {
     lines.push('(no rows)');

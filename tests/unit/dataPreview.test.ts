@@ -85,6 +85,27 @@ describe('parseDataPreview', () => {
     expect(formatDataPreview(result!)).toContain('# 2 rows\n');
   });
 
+  it('reads the database execution time, which arrives in milliseconds', () => {
+    // Field and unit verified live: COUNT(*) over 17M rows reported 7.114
+    // while the whole round trip took 159 ms - only db-side ms fit that.
+    const result = parseDataPreview(
+      tableData(
+        [{ name: 'MANDT', values: ['100'] }],
+        '<dataPreview:queryExecutionTime>0.1350000</dataPreview:queryExecutionTime>',
+      ),
+    );
+
+    expect(result?.executionTimeMs).toBe(0.135);
+    expect(formatDataPreview(result!)).toContain('# 1 rows (db time 0.135 ms)');
+  });
+
+  it('omits the time when the system does not report one', () => {
+    const result = parseDataPreview(tableData([{ name: 'MANDT', values: ['100'] }]));
+
+    expect(result?.executionTimeMs).toBeUndefined();
+    expect(formatDataPreview(result!)).toContain('# 1 rows\n');
+  });
+
   it('gives up on a payload that is not a data preview', () => {
     expect(parseDataPreview('<abap>source code</abap>')).toBeUndefined();
     expect(parseDataPreview('not xml at all <<<')).toBeUndefined();
