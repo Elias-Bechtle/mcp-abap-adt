@@ -412,7 +412,18 @@ This keeps verification on and validates the real certificate chain, which is st
 
 **"The session for system … had expired, and the re-login was rejected"** — the server recovers from an expired ADT session by itself (logging off in SAP GUI kills it, since both share the user's security session): it drops the dead session and retries once with the stored credentials. This message means that retry was rejected too, so the credentials themselves no longer work — the password changed or the user is locked. Update the keychain entry with `store-credentials` or in SAP Fiori tools. The server deliberately never retries more than once, to keep a stale password from locking the user out.
 
-**Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1` for extra stderr diagnostics, or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
+**Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1`. Every ADT call then appears on stderr with its status and duration, which is what makes the server's own retries visible:
+
+```
+[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 200 in 183ms
+[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 401 in 23ms
+[mcp-abap-adt] session for system "DEV" was rejected with 401; dropped it and retrying once.
+[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 200 in 78ms
+```
+
+Credentials, cookies and query bodies are never logged. The session line above appears without the flag as well, since a replaced session explains an extra request that would otherwise look like a hiccup.
+
+Or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
 ```bash
 npm run inspect

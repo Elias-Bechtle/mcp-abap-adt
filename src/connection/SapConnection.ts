@@ -4,6 +4,7 @@ import { Agent, Headers as UndiciHeaders, fetch as undiciFetch } from 'undici';
 import { defaultCredentialProviders, resolveCredentials } from '../auth/resolve.js';
 import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
+import { logDebug, logWarn } from '../lib/log.js';
 import { AdtHttpError, describeTlsFailure, findHttpStatus, summarizeHtmlPage } from './errors.js';
 
 /** An array value becomes a repeated query parameter, as ADT facets require. */
@@ -98,14 +99,13 @@ export class SapConnection {
     // and the call retried exactly once - more attempts would only feed the
     // failed-logon counter of a user whose password really did change.
     //
-    // Whether a dead session produces a 401 at all is a system setting. It was
-    // reported from one NetWeaver system, where it left every further call
-    // answering with the logon page until the server restarted. On another it
-    // could not be provoked: neither /sap/public/bc/icf/logoff nor a
-    // deliberately corrupted session id stopped ICF from re-authenticating via
-    // Basic auth and issuing a fresh session. So this path stays inert where
-    // the behaviour does not occur, and the fakes in connection.test.ts are
-    // what pin its logic down.
+    // Whether a dead session yields a 401 at all depends on the system's
+    // session security settings. Some answer the logon page and keep doing so
+    // until the client stops presenting the stale cookie; others let ICF
+    // re-authenticate from the Basic credentials and issue a fresh session, so
+    // nothing here ever fires. Both were observed on real systems. The path is
+    // therefore inert where the behaviour does not occur, and its logic is
+    // pinned down by the fakes in connection.test.ts.
     const hadSession = this.#cookies.size > 0;
     try {
       return await this.#requestOnce(path, options);
@@ -118,6 +118,10 @@ export class SapConnection {
       this.#credentials = undefined;
       if (!hadSession) throw error;
       this.#resetSession();
+      // Worth a line on stderr even though it heals itself: it explains the
+      // extra request, and it is the difference between "SAP is flaky" and
+      // "the session was replaced".
+      logWarn(`session for system "${this.name}" was rejected with 401; dropped it and retrying once.`);
       try {
         return await this.#requestOnce(path, options);
       } catch (retryError) {
@@ -234,6 +238,7 @@ export class SapConnection {
     const cookie = this.#cookieHeader();
     if (cookie) headers.Cookie = cookie;
 
+    const started = performance.now();
     try {
       const response = await this.#fetcher.raw<string, 'text'>(path, {
         baseURL: this.baseUrl,
@@ -248,10 +253,24 @@ export class SapConnection {
         dispatcher: this.#agent,
       });
       this.#storeCookies(response.headers);
+      this.#trace(options.method, path, started, response.status);
       return { status: response.status, headers: response.headers, data: response._data ?? '' };
     } catch (error) {
-      throw this.#mapError(error, path);
+      const mapped = this.#mapError(error, path);
+      this.#trace(options.method, path, started, mapped instanceof AdtHttpError ? mapped.status : 'failed');
+      throw mapped;
     }
+  }
+
+  /**
+   * One line per ADT call under MCP_ABAP_ADT_DEBUG, which is what makes the
+   * retries and token primes visible - they are otherwise invisible to whoever
+   * only sees a tool result. Deliberately no headers, no body and no query
+   * string: those carry the Authorization header, session cookies and the SQL
+   * a caller sent, none of which belongs in a log.
+   */
+  #trace(method: string, path: string, started: number, outcome: number | string): void {
+    logDebug(`${this.name} ${method} ${path} -> ${outcome} in ${Math.round(performance.now() - started)}ms`);
   }
 
   #query(extra: AdtRequestOptions['query']): Record<string, QueryValue> {

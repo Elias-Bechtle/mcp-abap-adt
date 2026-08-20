@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createInlineProvider } from '../../src/auth/providers/inline.js';
 import { SapConnection } from '../../src/connection/SapConnection.js';
@@ -188,7 +188,55 @@ const LOGON_PAGE =
   '<body><span class="errorTextHeader"> 401 Nicht autorisiert </span>' +
   "<img src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAABQCAYAAAGMt7zd'/></body></html>";
 
+/** Diagnostics go to stderr; stdout carries JSON-RPC and must stay untouched. */
+function captureStderr(): string[] {
+  const written: string[] = [];
+  vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+    written.push(String(chunk));
+    return true;
+  });
+  return written;
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe('expired sessions', () => {
+  it('says on stderr that it replaced the session', async () => {
+    const stderr = captureStderr();
+    const { connection } = connect((_call, index) => {
+      if (index === 0) return { body: 'first', setCookie: ['SESSION=alive; Path=/'] };
+      return index === 1 ? { status: 401, body: 'logon page' } : { body: 'recovered' };
+    });
+
+    await connection.request('/sap/bc/adt/x');
+    await connection.request('/sap/bc/adt/y');
+
+    const output = stderr.join('');
+    expect(output).toContain('session for system "dev" was rejected with 401');
+    expect(output).toContain('retrying once');
+  });
+
+  it('traces each call only when MCP_ABAP_ADT_DEBUG is set', async () => {
+    const quiet = captureStderr();
+    const { connection } = connect(() => ({ body: 'ok' }));
+    await connection.request('/sap/bc/adt/x');
+    expect(quiet.join('')).toBe('');
+
+    vi.restoreAllMocks();
+    const loud = captureStderr();
+    vi.stubEnv('MCP_ABAP_ADT_DEBUG', '1');
+    const second = connect(() => ({ body: 'ok' }));
+    await second.connection.request('/sap/bc/adt/y');
+
+    const output = loud.join('');
+    expect(output).toContain('dev GET /sap/bc/adt/y -> 200 in');
+    // The Authorization header and the cookies must never be logged.
+    expect(output).not.toContain('Basic ');
+    expect(output).not.toContain('secret');
+  });
+
   it('drops the dead session and retries once', async () => {
     const { connection, calls } = connect((_call, index) => {
       if (index === 0) return { body: 'first', setCookie: ['SAP_SESSIONID_T02_910=alive; Path=/; HttpOnly'] };
