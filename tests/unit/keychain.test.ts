@@ -40,6 +40,13 @@ function countingKeychain() {
   return { provider, reads: () => reads };
 }
 
+/** Decodes the password half of a Basic Authorization header. */
+function passwordOf(auth: string | undefined): string | undefined {
+  return Buffer.from((auth ?? '').replace('Basic ', ''), 'base64')
+    .toString()
+    .split(':')[1];
+}
+
 describe('credential caching on a connection', () => {
   it('reads the keychain once, not on every request', async () => {
     const { provider, reads } = countingKeychain();
@@ -68,6 +75,33 @@ describe('credential caching on a connection', () => {
     // starting the server would touch every configured system.
     expect(connection.name).toBe('dev');
     expect(reads()).toBe(0);
+  });
+
+  it('re-reads the keychain after a 401, so a rotated password needs no restart', async () => {
+    const passwords = ['old-password', 'new-password'];
+    let reads = 0;
+    const provider = createKeychainProvider(async () => ({
+      getPassword: async () => JSON.stringify({ username: 'U', password: passwords[reads++] ?? 'exhausted' }),
+      setPassword: async () => undefined,
+    }));
+    const { fetchImpl, calls } = fakeFetch((call) =>
+      passwordOf(call.headers.authorization) === 'new-password'
+        ? { body: 'ok' }
+        : { status: 401, body: '<html><title>Anmeldung fehlgeschlagen</title></html>' },
+    );
+    const connection = new SapConnection('dev', testSystem({ keychain: true, password: undefined }), {
+      fetch: fetchImpl,
+      providers: [provider],
+    });
+
+    // First call fails with the old password; the rejection empties the cache.
+    await expect(connection.request('/sap/bc/adt/x')).rejects.toThrow(/401/);
+    // The user rotates the keychain entry; the next call simply works.
+    const healed = await connection.request('/sap/bc/adt/x');
+
+    expect(healed.data).toBe('ok');
+    expect(reads).toBe(2);
+    expect(passwordOf(calls.at(-1)?.headers.authorization)).toBe('new-password');
   });
 
   it('does not cache a failed lookup, so fixing the entry needs no restart', async () => {

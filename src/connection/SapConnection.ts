@@ -101,7 +101,13 @@ export class SapConnection {
     try {
       return await this.#requestOnce(path, options);
     } catch (error) {
-      if (!hadSession || !findHttpStatus(error, 401)) throw error;
+      if (!findHttpStatus(error, 401)) throw error;
+      // Any 401 empties the credential cache, so the next attempt re-reads the
+      // keychain or the environment. A rotated password then heals on the next
+      // call instead of requiring a server restart. This costs nothing extra:
+      // no attempt happens that would not happen anyway.
+      this.#credentials = undefined;
+      if (!hadSession) throw error;
       this.#resetSession();
       try {
         return await this.#requestOnce(path, options);
