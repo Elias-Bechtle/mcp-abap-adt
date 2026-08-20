@@ -41,6 +41,13 @@ function expectTextResult(result: ToolResult) {
 
 describe.skipIf(!runLive)('live ADT integration', () => {
   beforeAll(async () => {
+    // The hermetic-home setup hides the developer's real configuration from
+    // the unit tests; this suite exists to use it, so it takes it back.
+    const { AMBIENT_HOME_ENV } = await import('../setup/hermeticHome.js');
+    for (const [name, value] of Object.entries(AMBIENT_HOME_ENV)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
     const config = await loadAppConfig();
     for (const error of config.errors) console.error(`${error.scope}: ${error.message}`);
     registry = new ConnectionRegistry(config);
@@ -107,5 +114,18 @@ describe.skipIf(!runLive)('live ADT integration', () => {
   // Exercises the CSRF token and cookie round trip, which no GET-only test covers.
   it('retrieves table contents', async () => {
     expectTextResult(await handleGetTableContents(connection, { table_name: 'DD02L', max_rows: 5 }));
+  });
+
+  // A field report claimed the freestyle endpoint rejects joins with "only one
+  // SELECT statement is allowed". Reproduction against a current release shows
+  // joins with tilde notation work; the report's system presumably differs.
+  it('runs a join through the sql console', async () => {
+    const { handleExecuteQuery } = await import('../../src/handlers/handleExecuteQuery.js');
+    const result = await handleExecuteQuery(connection, {
+      query: 'SELECT e070~trkorr, e071~obj_name FROM e070 INNER JOIN e071 ON e070~trkorr = e071~trkorr',
+      maxRows: 3,
+    });
+    expectTextResult(result);
+    expect(result.content[0].text).toContain('TRKORR');
   });
 });
