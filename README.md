@@ -423,6 +423,8 @@ This keeps verification on and validates the real certificate chain, which is st
 
 Credentials, cookies and query bodies are never logged. The session line above appears without the flag as well, since a replaced session explains an extra request that would otherwise look like a hiccup.
 
+The same messages also go to your MCP client through the protocol's own logging capability, which is where you are more likely to see them than in a log file you have to go find. A client can narrow them down with `logging/setLevel`; the MCP Inspector shows them in its log pane. stderr stays the fallback, because it works before the handshake and whatever the client does with notifications.
+
 Or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
 ```bash

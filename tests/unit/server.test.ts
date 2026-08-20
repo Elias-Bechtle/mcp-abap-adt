@@ -1,12 +1,20 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { describe, expect, it } from 'vitest';
+import { LoggingMessageNotificationSchema } from '@modelcontextprotocol/sdk/types.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createInlineProvider } from '../../src/auth/providers/inline.js';
 import { ConnectionRegistry } from '../../src/connection/registry.js';
 import type { ResolvedAppConfig, ResolvedSystem } from '../../src/config/schema.js';
 import { TOOL_DEFINITIONS, createServer } from '../../src/server.js';
+import { logWarn, setLogSink } from '../../src/lib/log.js';
 import { testSystem as system } from '../helpers/fakeConnection.js';
+
+// The sink is module state that createServer sets; a test must not leave a
+// closed server's sink behind for the next one.
+afterEach(() => {
+  setLogSink(undefined);
+});
 
 async function connectClient(config: Partial<ResolvedAppConfig> & { systems: Map<string, ResolvedSystem> }) {
   const resolved: ResolvedAppConfig = { errors: [], sources: [], ...config };
@@ -163,6 +171,50 @@ describe('ExecuteQuery over the protocol', () => {
     });
 
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('logging over the protocol', () => {
+  /** Collects notifications/message the server pushes to the client. */
+  async function clientCollectingLogs() {
+    const client = await connectClient(singleSystem);
+    const seen: Array<{ level: string; data: unknown; logger?: string }> = [];
+    client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {
+      seen.push(notification.params);
+    });
+    return { client, seen };
+  }
+
+  it('advertises the logging capability, so clients may set a level', async () => {
+    const client = await connectClient(singleSystem);
+
+    expect(client.getServerCapabilities()?.logging).toBeDefined();
+  });
+
+  it('accepts logging/setLevel', async () => {
+    const client = await connectClient(singleSystem);
+
+    await expect(client.setLoggingLevel('debug')).resolves.toBeDefined();
+  });
+
+  it('delivers a warning to the client rather than only to stderr', async () => {
+    const { seen } = await clientCollectingLogs();
+
+    logWarn('the session was replaced');
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+
+    expect(seen[0]).toMatchObject({ level: 'warning', logger: 'mcp-abap-adt', data: 'the session was replaced' });
+  });
+
+  it('honours the level the client asked for', async () => {
+    const { client, seen } = await clientCollectingLogs();
+    // "error" outranks "warning", so a warning must not be delivered.
+    await client.setLoggingLevel('error');
+
+    logWarn('should be filtered out');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(seen).toEqual([]);
   });
 });
 

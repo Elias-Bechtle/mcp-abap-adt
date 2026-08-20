@@ -24,6 +24,7 @@ import { handleGetTransaction } from './handlers/handleGetTransaction.js';
 import { handleGetTypeInfo } from './handlers/handleGetTypeInfo.js';
 import { handleListSystems } from './handlers/handleListSystems.js';
 import { handleSearchObject } from './handlers/handleSearchObject.js';
+import { setLogSink } from './lib/log.js';
 
 /**
  * Ceiling for both row-returning tools. A model asking for millions of rows
@@ -196,7 +197,17 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 ];
 
 export function createServer(registry: ConnectionRegistry): McpServer {
-  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
+  // Declaring the logging capability makes the SDK answer logging/setLevel on
+  // its own and drop anything below the level the client asked for.
+  const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION }, { capabilities: { logging: {} } });
+
+  // Diagnostics reach the client through the protocol, where a user can
+  // actually see them, instead of only a log file they have to go find.
+  // Failures are swallowed on purpose: a notification sent before the
+  // handshake, or after the transport closed, must never break a tool call.
+  setLogSink((level, message) => {
+    void server.server.sendLoggingMessage({ level, logger: SERVER_NAME, data: message }).catch(() => undefined);
+  });
 
   for (const tool of TOOL_DEFINITIONS) {
     server.registerTool(
