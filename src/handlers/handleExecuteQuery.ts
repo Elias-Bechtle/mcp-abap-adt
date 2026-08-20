@@ -27,9 +27,12 @@ export function assertSelectOnly(query: string): void {
   }
 }
 
+/** Queries run longer than metadata reads; grant them at least this much. */
+const QUERY_TIMEOUT_FLOOR_MS = 60_000;
+
 export async function handleExecuteQuery(
   connection: SapConnection,
-  args: { query: string; maxRows?: number },
+  args: { query: string; maxRows?: number; timeoutMs?: number },
 ): Promise<ToolResult> {
   try {
     if (!connection.config.allowFreeSql) {
@@ -47,6 +50,7 @@ export async function handleExecuteQuery(
       body: args.query.trim(),
       query: { rowNumber: args.maxRows ?? 100 },
       headers: { 'Content-Type': 'text/plain', Accept: 'application/xml, text/plain, */*' },
+      timeoutMs: args.timeoutMs ?? Math.max(connection.config.timeoutMs, QUERY_TIMEOUT_FLOOR_MS),
     });
     return return_text(compactDataPreview(response.data));
   } catch (error) {

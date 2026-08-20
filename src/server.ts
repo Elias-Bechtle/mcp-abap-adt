@@ -117,6 +117,16 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         .string()
         .describe("The SELECT statement, for example: SELECT carrid, connid FROM sflight WHERE carrid = 'LH'"),
       maxRows: z.number().int().min(1).max(MAX_ROW_LIMIT).default(100).describe('Maximum number of rows to return'),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(1000)
+        .max(600_000)
+        .optional()
+        .describe(
+          'Time budget for this query in milliseconds. Defaults to at least 60000, ' +
+            'since queries run longer than metadata reads. Raise it for heavy joins or LIKE scans.',
+        ),
     },
     handleExecuteQuery,
   ),

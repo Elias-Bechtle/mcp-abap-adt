@@ -295,6 +295,47 @@ describe('ExecuteQuery', () => {
     expect(calls).toHaveLength(0);
   });
 
+  describe('time budget', () => {
+    /** Records what reaches connection.request without any HTTP machinery. */
+    function recordingConnection(configTimeoutMs: number) {
+      const options: Array<{ timeoutMs?: number }> = [];
+      const connection = {
+        name: 'dev',
+        config: { allowFreeSql: true, timeoutMs: configTimeoutMs },
+        request: (_path: string, requestOptions: { timeoutMs?: number }) => {
+          options.push(requestOptions);
+          return Promise.resolve({ status: 200, headers: new Headers(), data: twoRows });
+        },
+      } as unknown as SapConnection;
+      return { connection, options };
+    }
+
+    it('grants queries at least a minute even when the system timeout is lower', async () => {
+      const { connection, options } = recordingConnection(30_000);
+
+      await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000' });
+
+      expect(options[0].timeoutMs).toBe(60_000);
+    });
+
+    it('keeps a system timeout that is already higher', async () => {
+      const { connection, options } = recordingConnection(120_000);
+
+      await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000' });
+
+      expect(options[0].timeoutMs).toBe(120_000);
+    });
+
+    it('lets the call itself decide, in both directions', async () => {
+      const { connection, options } = recordingConnection(30_000);
+
+      await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000', timeoutMs: 300_000 });
+      await handleExecuteQuery(connection, { query: 'SELECT mandt FROM t000', timeoutMs: 5_000 });
+
+      expect(options.map((entry) => entry.timeoutMs)).toEqual([300_000, 5_000]);
+    });
+  });
+
   it('surfaces a SAP syntax error rather than swallowing it', async () => {
     const { connection } = fakeConnection(() => ({ status: 400, body: 'Only one SELECT statement is allowed.' }));
 
