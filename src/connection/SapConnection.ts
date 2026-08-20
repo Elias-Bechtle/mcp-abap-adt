@@ -4,7 +4,7 @@ import { Agent, Headers as UndiciHeaders, fetch as undiciFetch } from 'undici';
 import { defaultCredentialProviders, resolveCredentials } from '../auth/resolve.js';
 import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
-import { AdtHttpError, describeTlsFailure } from './errors.js';
+import { AdtHttpError, describeTlsFailure, findHttpStatus } from './errors.js';
 
 /** An array value becomes a repeated query parameter, as ADT facets require. */
 export type QueryValue = string | number | boolean | Array<string | number>;
@@ -92,6 +92,33 @@ export class SapConnection {
   }
 
   async request(path: string, options: AdtRequestOptions = {}): Promise<AdtResponse> {
+    // A 401 on a connection that held session cookies means SAP invalidated
+    // the security session; a parallel GUI logoff by the same user is enough.
+    // The credentials are usually still valid, so the dead session is dropped
+    // and the call retried exactly once - more attempts would only feed the
+    // failed-logon counter of a user whose password really did change.
+    const hadSession = this.#cookies.size > 0;
+    try {
+      return await this.#requestOnce(path, options);
+    } catch (error) {
+      if (!hadSession || !findHttpStatus(error, 401)) throw error;
+      this.#resetSession();
+      try {
+        return await this.#requestOnce(path, options);
+      } catch (retryError) {
+        if (findHttpStatus(retryError, 401)) {
+          throw new Error(
+            `The session for system "${this.name}" had expired, and the re-login was rejected with 401. ` +
+              'The stored credentials are no longer accepted: check whether the password has changed or the user is locked.',
+            { cause: retryError },
+          );
+        }
+        throw retryError;
+      }
+    }
+  }
+
+  async #requestOnce(path: string, options: AdtRequestOptions): Promise<AdtResponse> {
     const method = options.method ?? 'GET';
     const execute: ExecuteOptions = {
       method,
@@ -115,6 +142,16 @@ export class SapConnection {
       }
       throw error;
     }
+  }
+
+  /**
+   * The CSRF token belongs to the session the cookies identify. Discarding one
+   * without the other would leave a half-session behind that keeps failing,
+   * which is why there is no way to clear them separately.
+   */
+  #resetSession(): void {
+    this.#cookies.clear();
+    this.#csrfToken = null;
   }
 
   /**

@@ -15,6 +15,19 @@ export function isHttpStatus(error: unknown, status: number): error is AdtHttpEr
   return error instanceof AdtHttpError && error.status === status;
 }
 
+/**
+ * Like isHttpStatus, but looks through wrappers: the CSRF prime wraps its
+ * failure in a plain Error whose cause is the real response, and the session
+ * recovery has to see that response no matter how it arrives.
+ */
+export function findHttpStatus(error: unknown, status: number, depth = 0): AdtHttpError | undefined {
+  if (depth > 5 || !error || typeof error !== 'object') return undefined;
+  if (error instanceof AdtHttpError) {
+    return error.status === status ? error : undefined;
+  }
+  return findHttpStatus((error as { cause?: unknown }).cause, status, depth + 1);
+}
+
 /** TLS handshake failures that a per-system `allowSelfSigned` would resolve. */
 const SELF_SIGNED_CODES = new Set([
   'SELF_SIGNED_CERT_IN_CHAIN',

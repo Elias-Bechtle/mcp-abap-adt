@@ -151,6 +151,74 @@ describe('CSRF handling', () => {
   });
 });
 
+/** Trimmed from a real 401 answer; SAP embeds a base64 logo of several kB. */
+const LOGON_PAGE =
+  '<html><head><meta http-equiv="content-type" content="text/html; charset=windows-1252">' +
+  '<title>Anmeldung fehlgeschlagen</title><style>body { background: #ffffff; }</style></head>' +
+  '<body><span class="errorTextHeader"> 401 Nicht autorisiert </span>' +
+  "<img src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAABQCAYAAAGMt7zd'/></body></html>";
+
+describe('expired sessions', () => {
+  it('drops the dead session and retries once', async () => {
+    const { connection, calls } = connect((_call, index) => {
+      if (index === 0) return { body: 'first', setCookie: ['SAP_SESSIONID_T02_910=alive; Path=/; HttpOnly'] };
+      if (index === 1) return { status: 401, body: LOGON_PAGE };
+      return { body: 'recovered' };
+    });
+
+    await connection.request('/sap/bc/adt/x');
+    const response = await connection.request('/sap/bc/adt/y');
+
+    expect(response.data).toBe('recovered');
+    expect(calls).toHaveLength(3);
+    // The dead cookie was sent once, recognised, and not sent again.
+    expect(calls[1].headers.cookie).toBe('SAP_SESSIONID_T02_910=alive');
+    expect(calls[2].headers.cookie).toBeUndefined();
+  });
+
+  it('renews the CSRF token together with the cookies', async () => {
+    let tokens = 0;
+    const { connection, calls } = connect((call, index) => {
+      if (call.headers['x-csrf-token'] === 'fetch') {
+        tokens += 1;
+        return { headers: { 'x-csrf-token': `TOKEN-${tokens}` }, setCookie: [`SESSION=s${tokens}; Path=/`] };
+      }
+      return index === 2 ? { status: 401, body: LOGON_PAGE } : { body: 'ok' };
+    });
+
+    await connection.request('/sap/bc/adt/x', { method: 'POST', body: 'a' });
+    const response = await connection.request('/sap/bc/adt/y', { method: 'POST', body: 'b' });
+
+    expect(response.data).toBe('ok');
+    // token fetch, POST, dead POST, token refetch, successful POST
+    expect(calls).toHaveLength(5);
+    expect(calls[4].headers['x-csrf-token']).toBe('TOKEN-2');
+    expect(calls[4].headers.cookie).toBe('SESSION=s2');
+  });
+
+  it('does not retry a 401 on a connection that never had a session', async () => {
+    // Wrong password and dead session are indistinguishable by status, but a
+    // fresh connection has nothing to renew: a second attempt would only add
+    // to the failed-logon counter of a user whose password changed.
+    const { connection, calls } = connect(() => ({ status: 401, body: LOGON_PAGE }));
+
+    await expect(connection.request('/sap/bc/adt/x')).rejects.toThrow(/401/);
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reports a failed re-login readably instead of looping', async () => {
+    const { connection, calls } = connect((_call, index) =>
+      index === 0 ? { body: 'ok', setCookie: ['SESSION=alive; Path=/'] } : { status: 401, body: LOGON_PAGE },
+    );
+
+    await connection.request('/sap/bc/adt/x');
+
+    await expect(connection.request('/sap/bc/adt/y')).rejects.toThrow(/re-login was rejected|no longer accepted/);
+    // one live call, one dead call, exactly one retry
+    expect(calls).toHaveLength(3);
+  });
+});
+
 describe('error mapping', () => {
   it('turns a 404 into an AdtHttpError carrying the ADT body', async () => {
     const { connection } = connect(() => ({ status: 404, body: '<exc>not found</exc>' }));
