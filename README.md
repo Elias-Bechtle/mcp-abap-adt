@@ -345,7 +345,7 @@ Every tool below takes an optional **`system`** argument naming a configured sys
 | Tool | Description | Arguments |
 | --- | --- | --- |
 | `ListSystems` | List configured systems, the default, and configuration problems. Returns no credentials. | — |
-| `ExecuteQuery` | Run a read-only ABAP SQL SELECT, returned as CSV | `query`, `maxRows` (default 100, max 5000) |
+| `ExecuteQuery` | Run a read-only ABAP SQL SELECT, returned as CSV | `query`, `maxRows` (default 100, max 5000), `timeoutMs` (default ≥ 60 s) |
 | `GetProgram` | ABAP program source | `program_name` |
 | `GetClass` | ABAP class source | `class_name` |
 | `GetInterface` | ABAP interface source | `interface_name` |
@@ -409,6 +409,8 @@ This keeps verification on and validates the real certificate chain, which is st
 **"No system was given and no default system is configured"** — you have more than one system and no `defaultSystem`. Either set one or pass `system` in the call.
 
 **SAP returns 401 or 403** — check the user and client, and that the user may use ADT. Some ADT endpoints need `S_DEVELOP` authorizations.
+
+**"The session for system … had expired, and the re-login was rejected"** — the server recovers from an expired ADT session by itself (logging off in SAP GUI kills it, since both share the user's security session): it drops the dead session and retries once with the stored credentials. This message means that retry was rejected too, so the credentials themselves no longer work — the password changed or the user is locked. Update the keychain entry with `store-credentials` or in SAP Fiori tools. The server deliberately never retries more than once, to keep a stale password from locking the user out.
 
 **Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1` for extra stderr diagnostics, or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
