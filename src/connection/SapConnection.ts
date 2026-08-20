@@ -4,7 +4,7 @@ import { Agent, Headers as UndiciHeaders, fetch as undiciFetch } from 'undici';
 import { defaultCredentialProviders, resolveCredentials } from '../auth/resolve.js';
 import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
-import { AdtHttpError, describeTlsFailure, findHttpStatus } from './errors.js';
+import { AdtHttpError, describeTlsFailure, findHttpStatus, summarizeHtmlPage } from './errors.js';
 
 /** An array value becomes a repeated query parameter, as ADT facets require. */
 export type QueryValue = string | number | boolean | Array<string | number>;
@@ -244,8 +244,14 @@ export class SapConnection {
     if (response?.status) {
       // Error responses carry cookies and CSRF tokens worth keeping.
       this.#storeCookies(response.headers);
-      const body = (error as { data?: unknown }).data ?? response._data;
-      return new AdtHttpError(response.status, stringifyBody(body), `${this.baseUrl}${path}`, response.headers);
+      const raw = stringifyBody((error as { data?: unknown }).data ?? response._data);
+      const htmlSummary = summarizeHtmlPage(raw);
+      const body = htmlSummary
+        ? response.status === 401
+          ? `${htmlSummary} The session or credentials were not accepted.`
+          : htmlSummary
+        : raw;
+      return new AdtHttpError(response.status, body, `${this.baseUrl}${path}`, response.headers);
     }
     return error instanceof Error ? error : new Error(String(error));
   }

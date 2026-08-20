@@ -229,6 +229,32 @@ describe('error mapping', () => {
     expect((error as AdtHttpError).body).toBe('<exc>not found</exc>');
   });
 
+  it('reduces an HTML logon page to one line instead of eight kilobytes', async () => {
+    const { connection } = connect(() => ({ status: 401, body: LOGON_PAGE }));
+
+    const error: unknown = await connection.request('/sap/bc/adt/x').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(AdtHttpError);
+    const { body } = error as AdtHttpError;
+    expect(body).toContain('Anmeldung fehlgeschlagen');
+    expect(body).toContain('session or credentials');
+    expect(body).not.toContain('base64');
+    expect(body.length).toBeLessThan(250);
+  });
+
+  it('keeps ADT XML error bodies whole, where the detail lives', async () => {
+    const { connection } = connect(() => ({
+      status: 400,
+      body: '<exc:exception><localizedMessage>Es ist nur eine SELECT-Anweisung zulässig</localizedMessage></exc:exception>',
+    }));
+
+    const error: unknown = await connection.request('/sap/bc/adt/x').catch((e: unknown) => e);
+
+    const { body } = error as AdtHttpError;
+    expect(body).toContain('SELECT-Anweisung');
+    expect(body).toContain('<exc:exception>');
+  });
+
   it('explains a certificate failure and points at allowSelfSigned', async () => {
     const tlsFailure = Object.assign(new TypeError('fetch failed'), {
       cause: Object.assign(new Error('self-signed certificate in chain'), {

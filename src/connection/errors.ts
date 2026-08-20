@@ -28,6 +28,20 @@ export function findHttpStatus(error: unknown, status: number, depth = 0): AdtHt
   return findHttpStatus((error as { cause?: unknown }).cause, status, depth + 1);
 }
 
+/**
+ * ICF answers 401 and some server errors with a full HTML page - around 8 kB
+ * including an embedded logo image. As an MCP error text that buries the one
+ * fact it carries, so it is reduced to a line. The page title survives because
+ * it is localized and names the reason ("Anmeldung fehlgeschlagen").
+ * Returns undefined for anything that is not an HTML document, in particular
+ * for ADT's XML exception bodies, which are worth keeping whole.
+ */
+export function summarizeHtmlPage(body: string): string | undefined {
+  if (!/^\s*(?:<!doctype\b|<html[\s>])/iu.test(body)) return undefined;
+  const title = /<title>([^<]*)<\/title>/iu.exec(body)?.[1]?.trim();
+  return `SAP answered with an HTML page instead of an ADT response${title ? `: "${title}"` : ''}.`;
+}
+
 /** TLS handshake failures that a per-system `allowSelfSigned` would resolve. */
 const SELF_SIGNED_CODES = new Set([
   'SELF_SIGNED_CERT_IN_CHAIN',
