@@ -10,6 +10,33 @@ onwards they are generated from conventional commits by
 [changelogen](https://github.com/unjs/changelogen) via `npm run release`, which
 is why the style changes further up the file.
 
+## v2.4.0
+
+[compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.3.0...v2.4.0)
+
+### 🚀 Features
+
+- **build:** Ship type declarations ([bddac82](https://github.com/janfrl/mcp-abap-adt/commit/bddac82))
+- **server:** Give ExecuteQuery a per-call time budget ([d7558ab](https://github.com/janfrl/mcp-abap-adt/commit/d7558ab))
+- **lib:** Report the database execution time with each query result ([6d0fe0c](https://github.com/janfrl/mcp-abap-adt/commit/6d0fe0c))
+
+### 🩹 Fixes
+
+- **connection:** Recover when SAP invalidates the security session ([5a47d59](https://github.com/janfrl/mcp-abap-adt/commit/5a47d59))
+- **connection:** Reduce SAP's HTML answer pages to one line ([6ecdea9](https://github.com/janfrl/mcp-abap-adt/commit/6ecdea9))
+- **connection:** Name the real cause when the CSRF prime fails ([8576afc](https://github.com/janfrl/mcp-abap-adt/commit/8576afc))
+- **connection:** Re-read credentials after a 401, so a rotated password heals ([2fdc5d7](https://github.com/janfrl/mcp-abap-adt/commit/2fdc5d7))
+
+### 📖 Documentation
+
+- Split migration and contributing out, lead section 3 with a chooser ([988cf98](https://github.com/janfrl/mcp-abap-adt/commit/988cf98))
+- Describe the session recovery and the ExecuteQuery time budget ([2520cf3](https://github.com/janfrl/mcp-abap-adt/commit/2520cf3))
+- **connection:** Record that the 401 session path is system-dependent ([227d515](https://github.com/janfrl/mcp-abap-adt/commit/227d515))
+
+### ❤️ Contributors
+
+- Jan Fröhlich ([@janfrl](https://github.com/janfrl))
+
 ## v2.3.0
 
 [compare changes](https://github.com/janfrl/mcp-abap-adt/compare/v2.2.0...v2.3.0)
