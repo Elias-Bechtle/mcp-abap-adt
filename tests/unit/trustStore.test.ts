@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ensureSystemTrustStore, resetTrustStoreForTests, type TrustStoreApi } from '../../src/lib/trustStore.js';
 
-function fakeApi(system: string[] = ['SYS-CA'], bundled: string[] = ['BUNDLED-CA']) {
+function fakeApi(system: string[] = ['SYS-CA'], defaults: string[] = ['BUNDLED-CA', 'EXTRA-CA']) {
   const applied: string[][] = [];
   const api: TrustStoreApi = {
-    getCACertificates: (type) => (type === 'system' ? system : bundled),
+    getCACertificates: (type) => (type === 'system' ? system : defaults),
     setDefaultCACertificates: (certificates) => void applied.push(certificates),
   };
   return { api, applied };
@@ -16,13 +16,14 @@ beforeEach(() => {
 });
 
 describe('ensureSystemTrustStore', () => {
-  it('adds the OS store to the bundled list rather than replacing it', () => {
+  it('adds the OS store to the effective default list rather than replacing it', () => {
     const { api, applied } = fakeApi(['SYS-1', 'SYS-2']);
 
     expect(ensureSystemTrustStore({}, api)).toBe(true);
-    // Additive like NODE_USE_SYSTEM_CA: a public certificate that only the
-    // bundled Mozilla list knows must keep validating.
-    expect(applied).toEqual([['BUNDLED-CA', 'SYS-1', 'SYS-2']]);
+    // On top of 'default', which carries both the bundled Mozilla list and a
+    // NODE_EXTRA_CA_CERTS file: neither a public certificate nor a file-based
+    // company CA may stop validating because the OS store was added.
+    expect(applied).toEqual([['BUNDLED-CA', 'EXTRA-CA', 'SYS-1', 'SYS-2']]);
   });
 
   it('does nothing when NODE_USE_SYSTEM_CA already did it natively', () => {

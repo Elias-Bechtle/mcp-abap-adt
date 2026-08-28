@@ -3,7 +3,7 @@ import tls from 'node:tls';
 import { logDebug } from './log.js';
 
 export interface TrustStoreApi {
-  getCACertificates(type: 'bundled' | 'system'): string[];
+  getCACertificates(type: 'default' | 'bundled' | 'system'): string[];
   setDefaultCACertificates(certificates: string[]): void;
 }
 
@@ -52,7 +52,10 @@ export function ensureSystemTrustStore(env: NodeJS.ProcessEnv = process.env, api
       loaded = false;
       return loaded;
     }
-    api.setDefaultCACertificates([...api.getCACertificates('bundled'), ...system]);
+    // On top of 'default', not 'bundled': the default list also carries the
+    // NODE_EXTRA_CA_CERTS file, which replacing from 'bundled' would silently
+    // drop - measured with a unique certificate before this was written.
+    api.setDefaultCACertificates([...api.getCACertificates('default'), ...system]);
     logDebug(`trusting ${system.length} CA certificates from the operating system store`);
     loaded = true;
   } catch {
