@@ -191,6 +191,31 @@ systems.dev.keychain=true
 
 Everything else — a config file in the working directory, the environment, the command line — takes precedence over it, in that order.
 
+### Onboarding a whole team: `setup --from`
+
+Because passwords live in the keychain, the system list itself contains no secrets — so it can be shared. Put a file like this in your team's repository or on a share:
+
+```jsonc
+// sap-systems.jsonc - no secrets in here
+{
+  "defaultSystem": "dev",
+  "systems": {
+    "dev": { "url": "https://dev.example.com:44300", "client": "100", "keychain": true },
+    "qas": { "url": "https://qas.example.com:44300", "client": "200", "keychain": true }
+  }
+}
+```
+
+Then a new team member runs one command:
+
+```bash
+npx -y @janfr/mcp-abap-adt setup --from ./sap-systems.jsonc
+```
+
+It folds the list into the user-level rc file (local settings win; the previous file is kept as `.bak`), asks once for username and password, and stores a keychain entry per system — after which both this server and the SAP Fiori tools extension work. `--skip-credentials` writes only the configuration.
+
+Only `.json`/`.jsonc` files are accepted and `extends` is refused: a shared file is edited by whoever can push to the team repository, so it must be data, never code.
+
 ### Adjusting an imported system
 
 A config-file entry whose name matches an imported system is treated as an **override**: you only name what differs, and the imported `url`, `client` and `keychain` settings stay. This is how you allow an internally issued certificate on a system that came from SAP Fiori tools:
@@ -237,6 +262,14 @@ mcp-abap-adt store-credentials --system dev
 ```
 
 It asks for the username and a password that is not echoed. An entry that already exists is only replaced after you confirm, because it may be one the Fiori tools extension wrote.
+
+When one password serves several systems — the usual case with a central user administration — rotate them all at once:
+
+```bash
+mcp-abap-adt store-credentials --all
+```
+
+One password prompt, one summary, one confirmation, and every system with `"keychain": true` gets its entry rewritten (a subset works too: `--systems dev,qas`). Each existing entry keeps its own username, so mixed-user landscapes are fine. Storing never attempts a logon — verify afterwards with `doctor --login`.
 
 ### Environment variable
 
@@ -380,7 +413,13 @@ To forbid ad-hoc queries against a system, set `"allowFreeSql": false` for it (o
 
 ## 7. Troubleshooting
 
-**Start with `ListSystems`.** It reports every configuration problem the server found, and it works even when nothing is configured correctly.
+**Start with `doctor`.** One table shows every configured system, where its credentials come from, whether the keychain actually holds the entry, and whether the host is reachable — with the usual causes (VPN, internal CA) named next to the failure:
+
+```bash
+npx -y @janfr/mcp-abap-adt doctor
+```
+
+Reachability is probed without authentication, so running it never touches a failed-logon counter. Add `--login` for exactly one real logon attempt per system when you want the password itself verified. Inside a chat, `ListSystems` answers the configuration half of the same questions.
 
 **"TLS certificate verification failed"** — the system's certificate is not trusted by the server process. Before switching verification off, check the next entry: in a company network the certificate is usually fine and only the trust store is missing.
 
