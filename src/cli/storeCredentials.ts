@@ -81,7 +81,7 @@ export async function writeCredentialEntries(
  * central user administration rotate one password across all systems, and
  * updating six keychain entries one by one was the reported pain.
  */
-async function storeBulk(
+export async function storeBulk(
   targets: Array<[string, ResolvedSystem]>,
   options: StoreCredentialsOptions,
   backend: KeychainBackend,
