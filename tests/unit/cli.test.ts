@@ -52,3 +52,114 @@ describe('store-credentials argument handling', () => {
     expect(stderr.join('')).toContain('Unknown system "nope"');
   });
 });
+
+/** Terminal stand-in: scripted answers in, captured output out. */
+function scriptedIo(answers: { line?: string[]; secret?: string[]; yesNo?: boolean[] } = {}) {
+  const out: string[] = [];
+  const err: string[] = [];
+  return {
+    out,
+    err,
+    io: {
+      line: async () => answers.line?.shift() ?? '',
+      secret: async () => answers.secret?.shift() ?? '',
+      yesNo: async () => answers.yesNo?.shift() ?? false,
+      out: (text: string) => void out.push(text),
+      err: (text: string) => void err.push(text),
+    },
+  };
+}
+
+function fakeBackend(initial: Record<string, string> = {}) {
+  const store = new Map(Object.entries(initial));
+  return {
+    store,
+    backend: {
+      getPassword: async (_service: string, account: string) => store.get(account) ?? null,
+      setPassword: async (_service: string, account: string, secret: string) => void store.set(account, secret),
+    },
+  };
+}
+
+describe('store-credentials --all', () => {
+  const threeSystems = {
+    systems: {
+      dev: { url: 'https://dev.example.com', client: '100', keychain: true },
+      qas: { url: 'https://qas.example.com', client: '200', keychain: true },
+      prd: { url: 'https://prd.example.com', client: '400' },
+    },
+  };
+
+  it('asks for the password once and keeps each entry its own username', async () => {
+    await writeFile(configFile, JSON.stringify(threeSystems), 'utf8');
+    const { backend, store } = fakeBackend({
+      'https://dev.example.com/100': JSON.stringify({ username: 'DEV_USER', password: 'old' }),
+      'https://qas.example.com/200': JSON.stringify({ username: 'QAS_USER', password: 'old' }),
+    });
+    const { io, out } = scriptedIo({ secret: ['new-password'], yesNo: [true] });
+
+    const code = await storeCredentials({ all: true, configFile }, { backend, io });
+
+    expect(code).toBe(0);
+    expect(JSON.parse(store.get('https://dev.example.com/100') ?? '')).toEqual({
+      username: 'DEV_USER',
+      password: 'new-password',
+    });
+    expect(JSON.parse(store.get('https://qas.example.com/200') ?? '')).toEqual({
+      username: 'QAS_USER',
+      password: 'new-password',
+    });
+    // prd has no "keychain": true, so --all leaves it alone.
+    expect(store.has('https://prd.example.com/400')).toBe(false);
+    // The summary names what is about to be written, before the confirmation.
+    expect(out.join('')).toContain('DEV_USER @ https://dev.example.com/100');
+  });
+
+  it('asks once for systems without an entry, defaulting to the common username', async () => {
+    await writeFile(configFile, JSON.stringify(threeSystems), 'utf8');
+    const { backend, store } = fakeBackend({
+      'https://dev.example.com/100': JSON.stringify({ username: 'SHARED', password: 'old' }),
+    });
+    // Empty answer takes the suggested default.
+    const { io } = scriptedIo({ line: [''], secret: ['pw'], yesNo: [true] });
+
+    const code = await storeCredentials({ all: true, configFile }, { backend, io });
+
+    expect(code).toBe(0);
+    expect(JSON.parse(store.get('https://qas.example.com/200') ?? '')).toMatchObject({ username: 'SHARED' });
+  });
+
+  it('rejects unknown names in --systems before touching anything', async () => {
+    await writeFile(configFile, JSON.stringify(threeSystems), 'utf8');
+    const { backend, store } = fakeBackend();
+    const { io, err } = scriptedIo();
+
+    const code = await storeCredentials({ systems: 'dev,nope', configFile }, { backend, io });
+
+    expect(code).toBe(2);
+    expect(err.join('')).toContain('nope');
+    expect(store.size).toBe(0);
+  });
+
+  it('writes nothing when the confirmation is declined', async () => {
+    await writeFile(configFile, JSON.stringify(threeSystems), 'utf8');
+    const { backend, store } = fakeBackend();
+    const { io } = scriptedIo({ line: ['U'], secret: ['pw'], yesNo: [false] });
+
+    const code = await storeCredentials({ all: true, configFile }, { backend, io });
+
+    expect(code).toBe(0);
+    expect(store.size).toBe(0);
+  });
+
+  it('explains itself when no system uses the keychain', async () => {
+    await writeFile(configFile, JSON.stringify({ systems: { prd: { url: 'https://prd.example.com' } } }), 'utf8');
+    const { backend } = fakeBackend();
+    const { io, err } = scriptedIo();
+
+    const code = await storeCredentials({ all: true, configFile }, { backend, io });
+
+    expect(code).toBe(2);
+    expect(err.join('')).toContain('"keychain": true');
+  });
+});

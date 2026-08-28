@@ -69,7 +69,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       'import-fiori-systems': { type: 'boolean' },
       'default-system': { type: 'string' },
       system: { type: 'string' },
+      systems: { type: 'string' },
+      all: { type: 'boolean' },
       username: { type: 'string' },
+      from: { type: 'string' },
+      login: { type: 'boolean' },
+      'skip-credentials': { type: 'boolean' },
     },
     allowPositionals: true,
     strict: false,
@@ -83,6 +88,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     const { storeCredentials } = await import('./cli/storeCredentials.js');
     process.exitCode = await storeCredentials({
       system: values.system as string | undefined,
+      systems: values.systems as string | undefined,
+      all: values.all === true,
       username: values.username as string | undefined,
       configFile,
     });
