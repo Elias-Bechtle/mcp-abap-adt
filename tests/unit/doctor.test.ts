@@ -93,6 +93,54 @@ describe('doctor', () => {
     expect(text()).toContain('allowSelfSigned');
   });
 
+  it('names the trust store when Node is the only one rejecting the certificate', async () => {
+    await writeFile(
+      configFile,
+      JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', username: 'U', password: 'P' } } }),
+      'utf8',
+    );
+    const { io, text } = collectingIo();
+    // Fails first, succeeds on the retry - which is what loading the OS trust
+    // store does on a company network.
+    let calls = 0;
+    const failsThenWorks: typeof globalThis.fetch = async () => {
+      calls += 1;
+      if (calls === 1) {
+        throw Object.assign(new TypeError('fetch failed'), {
+          cause: Object.assign(new Error('self-signed'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' }),
+        });
+      }
+      return new Response('logon', { status: 401 });
+    };
+
+    const code = await doctor({ configFile }, { io, probeFetch: failsThenWorks });
+
+    expect(code).toBe(1);
+    expect(text()).toContain('needs OS trust store');
+    // The fix is stated once, under the table, rather than in every row.
+    expect(text()).toContain('"NODE_USE_SYSTEM_CA": "1"');
+    expect(text()).toContain('which "allowSelfSigned" does not');
+  });
+
+  it('distinguishes a genuinely untrusted certificate from a missing trust store', async () => {
+    await writeFile(
+      configFile,
+      JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', username: 'U', password: 'P' } } }),
+      'utf8',
+    );
+    const { io, text } = collectingIo();
+
+    const code = await doctor({ configFile }, { io, probeFetch: tlsDown });
+
+    expect(code).toBe(1);
+    expect(text()).toContain('SELF_SIGNED_CERT_IN_CHAIN), untrusted');
+    expect(text()).toContain('not trusted even by your operating system');
+    // This case is not solved by the environment variable, so it must not be
+    // the advice given.
+    expect(text()).not.toContain('needs OS trust store');
+    expect(text()).not.toContain('NODE_USE_SYSTEM_CA');
+  });
+
   it('checks whether the keychain actually holds an entry', async () => {
     await writeFile(
       configFile,

@@ -1,3 +1,5 @@
+import tls from 'node:tls';
+
 import { Agent, fetch as undiciFetch } from 'undici';
 
 import { loadKeychainBackend } from '../auth/providers/keychain.js';
@@ -24,14 +26,41 @@ export interface DoctorDeps extends CliDeps {
 
 const PROBE_TIMEOUT_MS = 10_000;
 
+/** Row markers the summary below the table keys off, so guidance is stated once. */
+const TRUST_STORE_MARKER = 'needs OS trust store';
+const UNTRUSTED_MARKER = 'untrusted';
+
+/**
+ * Loads the operating system's trust store into this process, once.
+ *
+ * Node validates against its own bundled CA list unless told otherwise, which
+ * is why a certificate issued by a company's internal CA fails here while
+ * every browser on the same machine accepts it. Doing this after a TLS failure
+ * turns "six broken certificates" into the one thing that is actually wrong: a
+ * missing NODE_USE_SYSTEM_CA in the client's env block.
+ *
+ * The APIs arrived during Node 22, so their absence is not an error.
+ */
+let systemCaLoaded: boolean | undefined;
+function loadSystemTrustStore(): boolean {
+  if (systemCaLoaded !== undefined) return systemCaLoaded;
+  try {
+    const certificates = tls.getCACertificates('system');
+    tls.setDefaultCACertificates(certificates);
+    systemCaLoaded = certificates.length > 0;
+  } catch {
+    systemCaLoaded = false;
+  }
+  return systemCaLoaded;
+}
+
 /**
  * Reachability without authentication: a GET carrying no Authorization header
  * cannot be attributed to any user, so it proves host, port and TLS without
  * ever touching a failed-logon counter. Any HTTP status - the 401 challenge
  * above all - counts as reachable.
  */
-async function probeReachability(system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<string> {
-  const url = `${new URL(system.url).origin}/sap/bc/adt/discovery`;
+async function attempt(url: string, system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<string> {
   const agent = probeFetch ? undefined : new Agent({ connect: { rejectUnauthorized: !system.allowSelfSigned } });
   try {
     const doFetch = probeFetch ?? (undiciFetch as unknown as typeof globalThis.fetch);
@@ -41,15 +70,32 @@ async function probeReachability(system: ResolvedSystem, probeFetch?: typeof glo
     } as RequestInit);
     return `reachable (${response.status})`;
   } catch (error) {
-    const tls = describeTlsFailure(error, 'probe');
-    if (tls) {
-      const code = /\(([A-Z_]+)\)/u.exec(tls.message)?.[1] ?? 'TLS';
-      return `TLS failure (${code}) - consider "allowSelfSigned": true or NODE_USE_SYSTEM_CA=1`;
+    const failure = describeTlsFailure(error, 'probe');
+    if (failure) {
+      return `TLS failure (${/\(([A-Z_]+)\)/u.exec(failure.message)?.[1] ?? 'TLS'})`;
     }
     return 'unreachable - host down, VPN not connected, or DNS unknown';
   } finally {
     await agent?.close().catch(() => undefined);
   }
+}
+
+async function probeReachability(system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<string> {
+  const url = `${new URL(system.url).origin}/sap/bc/adt/discovery`;
+  const first = await attempt(url, system, probeFetch);
+  if (!first.startsWith('TLS failure')) return first;
+
+  // A TLS failure that disappears once the OS trust store is loaded is not a
+  // certificate problem at all - it is Node validating against its own bundled
+  // CA list. Saying which of the two it is decides whether the answer is one
+  // environment variable or a per-system exception.
+  if (loadSystemTrustStore()) {
+    const retry = await attempt(url, system, probeFetch);
+    // Kept short: the explanation belongs once under the table, not in every
+    // row, and the marker is what the summary below looks for.
+    if (retry.startsWith('reachable')) return `${retry}, needs OS trust store`;
+  }
+  return `${first}, ${UNTRUSTED_MARKER}`;
 }
 
 /** Exactly one authenticated request; a fresh connection never retries a 401. */
@@ -123,7 +169,7 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
       }
 
       const reach = await probeReachability(system, deps.probeFetch);
-      if (!reach.startsWith('reachable')) findings += 1;
+      if (!reach.startsWith('reachable') || reach.includes(TRUST_STORE_MARKER)) findings += 1;
 
       const row = [
         `${entry.name}${entry.isDefault ? ' *' : ''}`,
@@ -153,6 +199,22 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
   if (rows.length > 0) {
     io.out(`${renderTable(headers, rows)}\n`);
     io.out('* = default system\n');
+  }
+  if (rows.some((row) => row.some((cell) => cell.includes(TRUST_STORE_MARKER)))) {
+    io.out(
+      `\nThose systems present a certificate from a CA your operating system trusts but Node does not,\n` +
+        'which is the usual situation on a company network. One setting fixes all of them:\n\n' +
+        '  in every MCP client:  "env": { "NODE_USE_SYSTEM_CA": "1" }\n' +
+        '  in a shell:           NODE_USE_SYSTEM_CA=1 mcp-abap-adt doctor\n\n' +
+        'It keeps certificate verification on and validates the real chain, which "allowSelfSigned" does not.\n',
+    );
+  }
+  if (rows.some((row) => row.some((cell) => cell.includes(UNTRUSTED_MARKER)))) {
+    io.out(
+      '\nThose certificates are not trusted even by your operating system, so this is a real\n' +
+        'certificate problem rather than a Node one. Either have the CA installed, or accept it\n' +
+        'per system with "allowSelfSigned": true - which switches verification off for that system.\n',
+    );
   }
   if (backendError) io.out(`\nKeychain: ${backendError}\n`);
   if (config.errors.length > 0) {
