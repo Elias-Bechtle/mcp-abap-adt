@@ -12,7 +12,7 @@ import { promptLine, promptSecret, promptYesNo } from './prompt.js';
 export interface CliIo {
   line(question: string): Promise<string>;
   secret(question: string): Promise<string>;
-  yesNo(question: string): Promise<boolean>;
+  yesNo(question: string, defaultYes?: boolean): Promise<boolean>;
   out(text: string): void;
   err(text: string): void;
 }
@@ -137,7 +137,7 @@ export async function storeBulk(
   // One confirmation for the whole batch. These are the entries the Fiori
   // tools extension reads too, which is worth being conscious of once - but
   // only once, not per system.
-  if (!(await io.yesNo('Write them?'))) {
+  if (!(await io.yesNo('Write them?', true))) {
     io.out('Left unchanged.\n');
     return 0;
   }

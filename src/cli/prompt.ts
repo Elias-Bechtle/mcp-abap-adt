@@ -15,9 +15,21 @@ export async function promptLine(question: string): Promise<string> {
   }
 }
 
-export async function promptYesNo(question: string): Promise<boolean> {
-  const answer = await promptLine(`${question} [y/N] `);
-  return /^y(es)?$/i.test(answer);
+/** Exported for tests; the terminal handling stays in promptYesNo. */
+export function interpretYesNo(answer: string, defaultYes: boolean): boolean {
+  if (answer.trim() === '') return defaultYes;
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+/**
+ * The default expresses where the reader stands: "no" protects an action they
+ * have not asked for yet (overwriting an entry another tool may own), "yes"
+ * ratifies one they have already worked towards (a summary they read and a
+ * password they typed).
+ */
+export async function promptYesNo(question: string, defaultYes = false): Promise<boolean> {
+  const answer = await promptLine(`${question} ${defaultYes ? '[Y/n]' : '[y/N]'} `);
+  return interpretYesNo(answer, defaultYes);
 }
 
 /**

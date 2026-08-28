@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { interpretYesNo } from '../../src/cli/prompt.js';
 import { storeCredentials } from '../../src/cli/storeCredentials.js';
 
 let workDir: string;
@@ -161,5 +162,23 @@ describe('store-credentials --all', () => {
 
     expect(code).toBe(2);
     expect(err.join('')).toContain('"keychain": true');
+  });
+});
+
+describe('interpretYesNo', () => {
+  it('lets an empty answer take the offered default, in both directions', () => {
+    expect(interpretYesNo('', true)).toBe(true);
+    expect(interpretYesNo('', false)).toBe(false);
+  });
+
+  it('always honours an explicit answer over the default', () => {
+    expect(interpretYesNo('n', true)).toBe(false);
+    expect(interpretYesNo('no', true)).toBe(false);
+    expect(interpretYesNo('y', false)).toBe(true);
+    expect(interpretYesNo('Yes', false)).toBe(true);
+  });
+
+  it('treats anything unrecognisable as no', () => {
+    expect(interpretYesNo('jein', true)).toBe(false);
   });
 });
