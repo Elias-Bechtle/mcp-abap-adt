@@ -91,7 +91,6 @@ Every setting the config file accepts can also be given on the command line or t
   "command": "npx",
   "args": ["-y", "@janfr/mcp-abap-adt"],
   "env": {
-    "NODE_USE_SYSTEM_CA": "1",
     "SAP_IMPORT_FIORI_SYSTEMS": "true",
     "SAP_DEFAULT_SYSTEM": "DWM100"
   }
@@ -110,7 +109,6 @@ Adjusting one imported system, without repeating its url and client:
 
 ```json
 "env": {
-  "NODE_USE_SYSTEM_CA": "1",
   "SAP_IMPORT_FIORI_SYSTEMS": "true",
   "MCP_ABAP_ADT_CONFIG_JSON": "{\"systems\":{\"DNG001\":{\"allowSelfSigned\":true}}}"
 }
@@ -291,7 +289,7 @@ All clients follow the same shape: a command to run, and an `env` block for what
 
 If you use more than one client — say Claude Desktop and Claude Code — put the systems in a [user-level `.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) and keep every client's entry down to `npx -y @janfr/mcp-abap-adt`. Then there is one place to change a system rather than one per client.
 
-One thing cannot move there: `NODE_USE_SYSTEM_CA` and other `NODE_*` flags are Node's own, not settings of this server, and a client passes on only a short list of variables. Those stay in each client's `env` block.
+`NODE_*` flags are Node's own and would have to be repeated in each client's `env` block, since a client passes on only a short list of variables. The one that used to matter here, `NODE_USE_SYSTEM_CA`, is no longer needed: the server loads the operating system's trust store by itself.
 
 ### Claude Code
 
@@ -425,23 +423,9 @@ Reachability is probed without authentication, so running it never touches a fai
 
 If the certificate genuinely cannot be validated, add `"allowSelfSigned": true` to that system, or set `SAP_ALLOW_SELF_SIGNED=true` if you configure through environment variables. For a system that came from SAP Fiori tools, add an [override entry](#adjusting-an-imported-system) rather than redeclaring it. Version 1.x disabled verification for everyone; this version makes it a per-system decision.
 
-**Certificates work in your shell but not through your MCP client** — MCP clients do not hand the server your whole environment. They pass a small fixed list (`PATH`, `APPDATA`, `USERPROFILE`, `TEMP` and a few more), so anything you rely on for certificate trust is silently dropped.
+**Company networks: internal CA** — certificates issued by an internal CA live in the operating system's trust store, which Node normally ignores in favour of its own bundled list. The server therefore loads the OS trust store itself at startup: what your browser trusts, it trusts, and verification stays on. No `env` block entry is needed for this.
 
-This bites in company networks, where the SAP certificate is issued by an internal CA that the operating system trusts but Node's bundled CA list does not. Node only consults the OS trust store when told to, so pass that setting explicitly in the client's `env` block:
-
-```json
-{
-  "mcpServers": {
-    "mcp-abap-adt": {
-      "command": "node",
-      "args": ["C:/path/to/mcp-abap-adt/dist/index.js", "--config", "C:/path/to/mcp-abap-adt.config.jsonc"],
-      "env": { "NODE_USE_SYSTEM_CA": "1" }
-    }
-  }
-}
-```
-
-This keeps verification on and validates the real certificate chain, which is strictly better than `allowSelfSigned`. The same applies to `NODE_EXTRA_CA_CERTS` if your CA bundle lives in a file.
+That auto-loading needs runtime APIs that arrived during Node 22. On an older patch level - `doctor` will tell you with "needs OS trust store" - set the equivalent variable in the client's `env` block: `"NODE_USE_SYSTEM_CA": "1"`. To deliberately restrict the server to Node's bundled list, set `SAP_USE_SYSTEM_CA=false`. `NODE_EXTRA_CA_CERTS` keeps working for a CA bundle that lives in a file.
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
 
@@ -480,10 +464,10 @@ npm run inspect:cli -- --method tools/call --tool-name GetProgram --tool-arg pro
 
 Both pick up the config file from the working directory, so run them from the project root.
 
-The inspector spawns the server the same way a real MCP client does, **including the reduced set of environment variables**. That makes it a faithful reproduction rather than a friendlier environment: if a certificate fails in your client, it fails here too. Add the variable the same way the client would:
+The inspector spawns the server the same way a real MCP client does, **including the reduced set of environment variables**. That makes it a faithful reproduction rather than a friendlier environment: whatever fails in your client fails here too. Variables go in the same way a client would pass them:
 
 ```bash
-npm run inspect:cli -- -e NODE_USE_SYSTEM_CA=1 --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
+npm run inspect:cli -- -e SAP_DEFAULT_SYSTEM=dev --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
 ```
 
 ## 8. Further reading

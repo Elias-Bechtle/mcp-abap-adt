@@ -8,6 +8,7 @@ import { loadAppConfig, type AppConfigOverrides } from './config/load.js';
 import type { ConfigError, ResolvedAppConfig } from './config/schema.js';
 import { ConnectionRegistry } from './connection/registry.js';
 import { logWarn } from './lib/log.js';
+import { ensureSystemTrustStore } from './lib/trustStore.js';
 import { createServer } from './server.js';
 
 /**
@@ -81,6 +82,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   });
 
   loadPackageEnvFile();
+  // Before anything talks TLS: the server and every subcommand should trust
+  // what the operating system trusts, without an env-block incantation.
+  ensureSystemTrustStore();
   const configFile = values.config as string | undefined;
 
   // A subcommand means this is an interactive run, not an MCP session.

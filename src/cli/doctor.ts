@@ -1,5 +1,3 @@
-import tls from 'node:tls';
-
 import { Agent, fetch as undiciFetch } from 'undici';
 
 import { loadKeychainBackend } from '../auth/providers/keychain.js';
@@ -9,6 +7,7 @@ import type { ResolvedSystem } from '../config/schema.js';
 import { AdtHttpError, describeTlsFailure, findHttpStatus } from '../connection/errors.js';
 import { SapConnection } from '../connection/SapConnection.js';
 import { ConnectionRegistry } from '../connection/registry.js';
+import { ensureSystemTrustStore } from '../lib/trustStore.js';
 import { defaultIo, type CliDeps } from './storeCredentials.js';
 
 export interface DoctorOptions {
@@ -29,30 +28,6 @@ const PROBE_TIMEOUT_MS = 10_000;
 /** Row markers the summary below the table keys off, so guidance is stated once. */
 const TRUST_STORE_MARKER = 'needs OS trust store';
 const UNTRUSTED_MARKER = 'untrusted';
-
-/**
- * Loads the operating system's trust store into this process, once.
- *
- * Node validates against its own bundled CA list unless told otherwise, which
- * is why a certificate issued by a company's internal CA fails here while
- * every browser on the same machine accepts it. Doing this after a TLS failure
- * turns "six broken certificates" into the one thing that is actually wrong: a
- * missing NODE_USE_SYSTEM_CA in the client's env block.
- *
- * The APIs arrived during Node 22, so their absence is not an error.
- */
-let systemCaLoaded: boolean | undefined;
-function loadSystemTrustStore(): boolean {
-  if (systemCaLoaded !== undefined) return systemCaLoaded;
-  try {
-    const certificates = tls.getCACertificates('system');
-    tls.setDefaultCACertificates(certificates);
-    systemCaLoaded = certificates.length > 0;
-  } catch {
-    systemCaLoaded = false;
-  }
-  return systemCaLoaded;
-}
 
 /**
  * Reachability without authentication: a GET carrying no Authorization header
@@ -89,7 +64,7 @@ async function probeReachability(system: ResolvedSystem, probeFetch?: typeof glo
   // certificate problem at all - it is Node validating against its own bundled
   // CA list. Saying which of the two it is decides whether the answer is one
   // environment variable or a per-system exception.
-  if (loadSystemTrustStore()) {
+  if (ensureSystemTrustStore()) {
     const retry = await attempt(url, system, probeFetch);
     // Kept short: the explanation belongs once under the table, not in every
     // row, and the marker is what the summary below looks for.
