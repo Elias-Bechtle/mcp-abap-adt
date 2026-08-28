@@ -5,6 +5,7 @@ import { defaultCredentialProviders, resolveCredentials } from '../auth/resolve.
 import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
 import { logDebug, logWarn } from '../lib/log.js';
+import { ensureSystemTrustStore } from '../lib/trustStore.js';
 import { AdtHttpError, describeTlsFailure, findHttpStatus, summarizeHtmlPage } from './errors.js';
 
 /** An array value becomes a repeated query parameter, as ADT facets require. */
@@ -73,6 +74,12 @@ export class SapConnection {
     deps: SapConnectionDeps = {},
   ) {
     this.#providers = deps.providers ?? defaultCredentialProviders();
+    // Where connections are born is where the OS trust store has to be in
+    // effect. The CLI entry point loads it too, but anyone embedding this
+    // class directly - the shipped type declarations invite that - would
+    // otherwise fail on a company CA that the command line handles fine.
+    // Memoised, opt-out via SAP_USE_SYSTEM_CA=false.
+    ensureSystemTrustStore();
     // Certificate verification is on unless the system opts out. Pairing
     // undici's Agent with undici's own fetch keeps the dispatcher compatible;
     // mixing it with the global fetch is a known source of breakage.
