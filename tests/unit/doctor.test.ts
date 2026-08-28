@@ -57,7 +57,10 @@ describe('doctor', () => {
 
     expect(code).toBe(0);
     expect(text()).toContain('dev *');
-    expect(text()).toContain('reachable (401)');
+    // The unauthenticated probe answers 401; the cell must not show a number
+    // that reads like an error for a healthy system.
+    expect(text()).toContain('reachable');
+    expect(text()).not.toContain('reachable (401)');
     expect(text()).toContain('Everything checks out.');
     // Without --login the output says that credentials went untested.
     expect(text()).toContain('--login');

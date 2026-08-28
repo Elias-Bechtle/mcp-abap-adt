@@ -43,7 +43,12 @@ async function attempt(url: string, system: ResolvedSystem, probeFetch?: typeof 
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       ...(agent ? { dispatcher: agent } : {}),
     } as RequestInit);
-    return `reachable (${response.status})`;
+    // 401 is SAP's correct answer to a request without credentials and 200 is
+    // an anonymously readable discovery - both simply mean healthy, and a
+    // number that looks like an error must not decorate the normal case. Other
+    // statuses stay visible; a 403 here reliably means the host does not offer
+    // ADT to this user at all (a Gateway hub, typically).
+    return response.status === 401 || response.status === 200 ? 'reachable' : `reachable (${response.status})`;
   } catch (error) {
     const failure = describeTlsFailure(error, 'probe');
     if (failure) {
