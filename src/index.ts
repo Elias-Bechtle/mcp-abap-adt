@@ -84,6 +84,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const configFile = values.config as string | undefined;
 
   // A subcommand means this is an interactive run, not an MCP session.
+  if (positionals[0] === 'doctor') {
+    const { doctor } = await import('./cli/doctor.js');
+    process.exitCode = await doctor({ configFile, login: values.login === true });
+    return;
+  }
+
   if (positionals[0] === 'store-credentials') {
     const { storeCredentials } = await import('./cli/storeCredentials.js');
     process.exitCode = await storeCredentials({
