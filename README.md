@@ -26,25 +26,21 @@ This is a fork of [mario-andreschak/mcp-abap-adt](https://github.com/mario-andre
 
 ## 2. Installation
 
-Most MCP clients run the server for you; you rarely start it by hand. Point your client at:
+Most MCP clients run the server for you; you rarely start it by hand. Two ways to install, differing in who decides when you update:
 
-```bash
-npx -y @janfr/mcp-abap-adt
-```
-
-A bare `npx -y` resolves `latest` on every start - convenient, but it means silently running whatever was published last, and this server holds your SAP credentials. Two ways to make updates a conscious act instead:
-
-**Install globally** (nicest for a permanent setup): the client entry shrinks to `"command": "mcp-abap-adt"` and never changes again, and updating is one deliberate command rather than an edit in every client:
+**Global install — you decide when to update.** The client entry is `"command": "mcp-abap-adt"` and never changes; updating is one deliberate command:
 
 ```bash
 npm install -g @janfr/mcp-abap-adt
 ```
 
-Or **pin the version** in the npx call and bump it yourself:
+**Plain npx — updates arrive automatically.** The client entry is `npx -y @janfr/mcp-abap-adt`, which resolves `latest` on every start:
 
 ```bash
-npx -y @janfr/mcp-abap-adt@2.5.0
+npx -y @janfr/mcp-abap-adt
 ```
+
+That convenience has a price worth knowing: whatever gets published under this name runs on your machine at the next start, unseen — and this server holds your SAP credentials. If the npm account behind a package is ever compromised (supply-chain attack), auto-updating installations are the ones that execute the malicious version. Pinning a version in the npx call (`@janfr/mcp-abap-adt@2.5.0`) closes that window too, at the cost of editing every client to update.
 
 ### From source
 
