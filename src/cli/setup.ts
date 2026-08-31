@@ -7,6 +7,7 @@ import { defu } from 'defu';
 import { parse as parseRc, serialize as serializeRc } from 'rc9';
 
 import { loadKeychainBackend } from '../auth/providers/keychain.js';
+import { formatIssues } from '../config/load.js';
 import { AppConfigFileSchema, SystemConfigSchema, type ResolvedSystem } from '../config/schema.js';
 import { defaultIo, storeBulk, type CliDeps } from './storeCredentials.js';
 
@@ -78,25 +79,39 @@ export async function setup(options: SetupOptions, deps: SetupDeps = {}): Promis
 
   const parsed = AppConfigFileSchema.safeParse(raw);
   if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
-      .join('; ');
-    io.err(`The team file is invalid: ${issues}\n`);
+    io.err(`The team file is invalid: ${formatIssues(parsed.error)}\n`);
     return 2;
   }
   const team = parsed.data;
   // The app config tolerates single malformed systems so one typo cannot take
   // a running server down. A team file is different: it is authored once for
   // everyone, so a broken entry is rejected here, before it spreads.
+  const keychainDefaulted: string[] = [];
   const teamSystems: Array<[string, ResolvedSystem]> = [];
   for (const [name, value] of Object.entries(team.systems)) {
+    // rc9 flattens system names into dotted keys. A dot nests, whitespace
+    // makes the line unparseable, and an all-digit name turns `systems` into
+    // a sparse array - each of them silently, on the next read. Measured, not
+    // imagined; hence names are gated here, where the file can still be fixed.
+    if (!/^[A-Za-z0-9_-]+$/u.test(name) || /^\d+$/u.test(name)) {
+      io.err(
+        `The team file is invalid - system name "${name}" cannot survive the rc file format: ` +
+          'use letters, digits, _ or - (not digits only), without spaces or dots.\n',
+      );
+      return 2;
+    }
     const system = SystemConfigSchema.safeParse(value);
     if (!system.success) {
-      const issues = system.error.issues
-        .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
-        .join('; ');
-      io.err(`The team file is invalid - system "${name}": ${issues}\n`);
+      io.err(`The team file is invalid - system "${name}": ${formatIssues(system.error)}\n`);
       return 2;
+    }
+    // A team file's whole point is per-user credentials from the keychain. An
+    // entry that names no credential source at all means exactly that, so the
+    // author should not have to know a schema default to get working onboarding.
+    const rawEntry = value as Record<string, unknown>;
+    if (!('keychain' in rawEntry) && !system.data.password && !system.data.passwordEnv) {
+      system.data.keychain = true;
+      keychainDefaulted.push(name);
     }
     teamSystems.push([name, { ...system.data, origin: 'config-file' }]);
   }
@@ -119,9 +134,20 @@ export async function setup(options: SetupOptions, deps: SetupDeps = {}): Promis
     // no rc file yet - the normal case on a fresh machine
   }
 
+  // The systems as normalised above (keychain defaulting included), so what
+  // the rc file says matches what the credential step below acts on.
+  const normalisedSystems = Object.fromEntries(
+    teamSystems.map(([name, system]) => {
+      const { origin: _origin, ...rest } = system;
+      return [name, rest];
+    }),
+  );
   const merged = defu(existing, {
     ...(team.defaultSystem ? { defaultSystem: team.defaultSystem } : {}),
-    systems: team.systems,
+    // The usage text promises "the same object a config file holds", so the
+    // flag must travel too rather than being dropped without a word.
+    ...('importFioriSystems' in raw ? { importFioriSystems: team.importFioriSystems } : {}),
+    systems: normalisedSystems,
   });
 
   if (hadRc) {
@@ -137,6 +163,9 @@ export async function setup(options: SetupOptions, deps: SetupDeps = {}): Promis
   io.out(`Wrote ${rcPath}${hadRc ? ` (previous version in ${rcPath}.bak)` : ''}.\n`);
   if (added.length > 0) io.out(`  added:               ${added.join(', ')}\n`);
   if (kept.length > 0) io.out(`  kept local settings: ${kept.join(', ')}\n`);
+  if (keychainDefaulted.length > 0) {
+    io.out(`  keychain enabled:    ${keychainDefaulted.join(', ')} (no credential source named in the team file)\n`);
+  }
 
   if (!options.skipCredentials) {
     const targets = teamSystems.filter(([, system]) => system.keychain);
@@ -144,6 +173,10 @@ export async function setup(options: SetupOptions, deps: SetupDeps = {}): Promis
       const backend = deps.backend ?? (await loadKeychainBackend());
       const code = await storeBulk(targets, { username: options.username }, backend, io);
       if (code !== 0) return code;
+    } else {
+      // "Done." after silently storing nothing sent users to their first tool
+      // call convinced their password was saved.
+      io.out('No system in the team file uses the keychain, so no password was stored.\n');
     }
   }
 

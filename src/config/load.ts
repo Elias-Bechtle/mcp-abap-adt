@@ -92,7 +92,7 @@ function readEnvConfig(env: NodeJS.ProcessEnv, errors: ConfigError[], sources: s
   return overrides;
 }
 
-function formatIssues(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
+export function formatIssues(error: { issues: Array<{ path: PropertyKey[]; message: string }> }): string {
   return error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`).join('; ');
 }
 

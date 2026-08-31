@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -14,8 +14,7 @@ let teamFile: string;
 beforeEach(async () => {
   workDir = await mkdtemp(join(tmpdir(), 'mcp-abap-adt-setup-'));
   rcDir = join(workDir, 'home');
-  await rm(rcDir, { recursive: true, force: true });
-  await (await import('node:fs/promises')).mkdir(rcDir, { recursive: true });
+  await mkdir(rcDir);
   teamFile = join(workDir, 'team-systems.jsonc');
 });
 
@@ -141,6 +140,63 @@ describe('setup --from', () => {
 
     expect(code).toBe(0);
     expect(store.size).toBe(0);
+  });
+
+  it('rejects a system name the rc file format cannot carry', async () => {
+    // Measured: a dot nests, whitespace drops the line, digits build an array.
+    await writeFile(teamFile, JSON.stringify({ systems: { 's4h.dev': { url: 'https://x.example.com' } } }), 'utf8');
+    const { io, err } = scriptedIo();
+
+    const code = await setup({ from: teamFile }, { io, backend: fakeBackend().backend, rcDir });
+
+    expect(code).toBe(2);
+    expect(err()).toContain('s4h.dev');
+    expect(err()).toContain('rc file format');
+  });
+
+  it('enables the keychain for systems that name no credential source', async () => {
+    // A team file exists for per-user credentials; its author should not need
+    // to know a schema default to get working onboarding.
+    await writeFile(
+      teamFile,
+      JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', client: '100' } } }),
+      'utf8',
+    );
+    const { backend, store } = fakeBackend();
+    const { io, out } = scriptedIo({ line: ['U'], secret: ['pw'], yesNo: [true] });
+
+    const code = await setup({ from: teamFile }, { io, backend, rcDir });
+
+    expect(code).toBe(0);
+    expect(out()).toContain('keychain enabled:    dev');
+    expect(store.has('https://dev.example.com/100')).toBe(true);
+    expect(await readFile(join(rcDir, '.mcp-abap-adtrc'), 'utf8')).toContain('systems.dev.keychain=true');
+  });
+
+  it('says so instead of printing Done when nothing uses the keychain', async () => {
+    await writeFile(
+      teamFile,
+      JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', passwordEnv: 'DEV_PW' } } }),
+      'utf8',
+    );
+    const { backend, store } = fakeBackend();
+    const { io, out } = scriptedIo();
+
+    const code = await setup({ from: teamFile }, { io, backend, rcDir });
+
+    expect(code).toBe(0);
+    expect(out()).toContain('no password was stored');
+    expect(store.size).toBe(0);
+  });
+
+  it('carries importFioriSystems into the rc file when the team file sets it', async () => {
+    await writeFile(teamFile, JSON.stringify({ importFioriSystems: true, ...TEAM }), 'utf8');
+    const { io } = scriptedIo();
+
+    const code = await setup({ from: teamFile, skipCredentials: true }, { io, backend: fakeBackend().backend, rcDir });
+
+    expect(code).toBe(0);
+    expect(await readFile(join(rcDir, '.mcp-abap-adtrc'), 'utf8')).toContain('importFioriSystems=true');
   });
 
   it('explains itself without --from', async () => {
