@@ -277,6 +277,7 @@ export class SapConnection {
    * a caller sent, none of which belongs in a log.
    */
   #trace(method: string, path: string, started: number, outcome: number | string): void {
+    if (!process.env.MCP_ABAP_ADT_DEBUG) return;
     logDebug(`${this.name} ${method} ${path} -> ${outcome} in ${Math.round(performance.now() - started)}ms`);
   }
 

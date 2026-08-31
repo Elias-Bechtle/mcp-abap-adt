@@ -36,7 +36,9 @@ export function resetTrustStoreForTests(): void {
 export function ensureSystemTrustStore(env: NodeJS.ProcessEnv = process.env, api: TrustStoreApi = tls): boolean {
   if (loaded !== undefined) return loaded;
 
-  if (env.NODE_USE_SYSTEM_CA) {
+  // Node itself only honours the value 1; anything else (0, false, typo) left
+  // the store unloaded, so this must not treat it as done.
+  if (env.NODE_USE_SYSTEM_CA === '1') {
     loaded = true;
     return loaded;
   }
