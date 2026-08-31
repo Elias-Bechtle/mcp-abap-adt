@@ -73,7 +73,7 @@ Setting all four of these gives you one system named `default`, which is what to
 | `SAP_PASSWORD` | yes | Password |
 | `SAP_CLIENT` | yes | Three digit client, e.g. `100` |
 | `SAP_LANGUAGE` | no | Logon language, e.g. `EN` |
-| `SAP_ALLOW_SELF_SIGNED` | no | `true` accepts self-signed or internally issued certificates |
+| `SAP_ALLOW_SELF_SIGNED` | no | Last resort: `true` skips certificate verification. Internal company CAs need nothing - the OS trust store is loaded automatically |
 | `SAP_ALLOW_FREE_SQL` | no | `false` forbids ad-hoc SELECTs through `ExecuteQuery` |
 
 Every `SAP_*` variable sets one field of the system named `default`, and each has the same name and meaning as the corresponding config-file key.
@@ -110,7 +110,7 @@ Adjusting one imported system, without repeating its url and client:
 ```json
 "env": {
   "SAP_IMPORT_FIORI_SYSTEMS": "true",
-  "MCP_ABAP_ADT_CONFIG_JSON": "{\"systems\":{\"DNG001\":{\"allowSelfSigned\":true}}}"
+  "MCP_ABAP_ADT_CONFIG_JSON": "{\"systems\":{\"DNG001\":{\"language\":\"EN\"}}}"
 }
 ```
 
@@ -216,14 +216,14 @@ Only `.json`/`.jsonc` files are accepted and `extends` is refused: a shared file
 
 ### Adjusting an imported system
 
-A config-file entry whose name matches an imported system is treated as an **override**: you only name what differs, and the imported `url`, `client` and `keychain` settings stay. This is how you allow an internally issued certificate on a system that came from SAP Fiori tools:
+A config-file entry whose name matches an imported system is treated as an **override**: you only name what differs, and the imported `url`, `client` and `keychain` settings stay. For example, to pin the logon language of one imported system:
 
 ```jsonc
 {
   "importFioriSystems": true,
   "systems": {
     // DNG001 keeps its imported url and client; only this one setting changes.
-    "DNG001": { "allowSelfSigned": true }
+    "DNG001": { "language": "EN" }
   }
 }
 ```
