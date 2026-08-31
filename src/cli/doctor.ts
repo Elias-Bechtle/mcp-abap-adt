@@ -21,61 +21,55 @@ export interface DoctorDeps extends CliDeps {
   probeFetch?: typeof globalThis.fetch;
   /** Handed to SapConnection for --login; injected in tests. */
   loginFetch?: typeof globalThis.fetch;
+  /** Trust-store outcome; injected in tests, which must not depend on the host's CA store. */
+  ensureTrustStore?: () => boolean;
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
 
-/** Row markers the summary below the table keys off, so guidance is stated once. */
-const TRUST_STORE_MARKER = 'needs OS trust store';
-const UNTRUSTED_MARKER = 'untrusted';
+/**
+ * The classification carries the machine-readable half; `label` is only for
+ * the table cell. Findings counter and summary paragraphs key off the fields,
+ * never off the display text - a reworded cell must not change the exit code.
+ */
+interface Reachability {
+  ok: boolean;
+  tlsFailed: boolean;
+  label: string;
+}
 
 /**
  * Reachability without authentication: a GET carrying no Authorization header
  * cannot be attributed to any user, so it proves host, port and TLS without
  * ever touching a failed-logon counter. Any HTTP status - the 401 challenge
- * above all - counts as reachable.
+ * above all - counts as reachable. 401 and an anonymously readable 200 render
+ * without the number: a healthy system must not wear a status that reads like
+ * an error. Other statuses keep it, because there it is information - a 403
+ * reliably means the host does not offer ADT to this user at all (a Gateway
+ * hub, typically).
  */
-async function attempt(url: string, system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<string> {
-  const agent = probeFetch ? undefined : new Agent({ connect: { rejectUnauthorized: !system.allowSelfSigned } });
+async function probeReachability(system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<Reachability> {
+  const url = `${new URL(system.url).origin}/sap/bc/adt/discovery`;
+  // The Agent is built even when a test injects its fetch, so the one branch
+  // deciding certificate verification is exercised by every test run.
+  const agent = new Agent({ connect: { rejectUnauthorized: !system.allowSelfSigned } });
   try {
     const doFetch = probeFetch ?? (undiciFetch as unknown as typeof globalThis.fetch);
     const response = await doFetch(url, {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-      ...(agent ? { dispatcher: agent } : {}),
-    } as RequestInit);
-    // 401 is SAP's correct answer to a request without credentials and 200 is
-    // an anonymously readable discovery - both simply mean healthy, and a
-    // number that looks like an error must not decorate the normal case. Other
-    // statuses stay visible; a 403 here reliably means the host does not offer
-    // ADT to this user at all (a Gateway hub, typically).
-    return response.status === 401 || response.status === 200 ? 'reachable' : `reachable (${response.status})`;
+      dispatcher: agent,
+    } as unknown as RequestInit);
+    const label = response.status === 401 || response.status === 200 ? 'reachable' : `reachable (${response.status})`;
+    return { ok: true, tlsFailed: false, label };
   } catch (error) {
-    const failure = describeTlsFailure(error, 'probe');
-    if (failure) {
-      return `TLS failure (${/\(([A-Z_]+)\)/u.exec(failure.message)?.[1] ?? 'TLS'})`;
+    if (describeTlsFailure(error, 'probe')) {
+      const code = /\(([A-Z_]+)\)/u.exec(describeTlsFailure(error, 'probe')?.message ?? '')?.[1] ?? 'TLS';
+      return { ok: false, tlsFailed: true, label: `TLS failure (${code})` };
     }
-    return 'unreachable - host down, VPN not connected, or DNS unknown';
+    return { ok: false, tlsFailed: false, label: 'unreachable - host down, VPN not connected, or DNS unknown' };
   } finally {
-    await agent?.close().catch(() => undefined);
+    await agent.close().catch(() => undefined);
   }
-}
-
-async function probeReachability(system: ResolvedSystem, probeFetch?: typeof globalThis.fetch): Promise<string> {
-  const url = `${new URL(system.url).origin}/sap/bc/adt/discovery`;
-  const first = await attempt(url, system, probeFetch);
-  if (!first.startsWith('TLS failure')) return first;
-
-  // A TLS failure that disappears once the OS trust store is loaded is not a
-  // certificate problem at all - it is Node validating against its own bundled
-  // CA list. Saying which of the two it is decides whether the answer is one
-  // environment variable or a per-system exception.
-  if (ensureSystemTrustStore()) {
-    const retry = await attempt(url, system, probeFetch);
-    // Kept short: the explanation belongs once under the table, not in every
-    // row, and the marker is what the summary below looks for.
-    if (retry.startsWith('reachable')) return `${retry}, needs OS trust store`;
-  }
-  return `${first}, ${UNTRUSTED_MARKER}`;
 }
 
 /** Exactly one authenticated request; a fresh connection never retries a 401. */
@@ -115,6 +109,12 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
   const registry = new ConnectionRegistry(config);
   const listed = registry.listSystems();
 
+  // After loadAppConfig on purpose, so an opt-out arriving through a .env
+  // file has been seen. When this returns false - old Node without the
+  // runtime APIs, or the opt-out - a TLS failure cannot be blamed on the
+  // certificate, and the advice below differs accordingly.
+  const trustStoreLoaded = (deps.ensureTrustStore ?? ensureSystemTrustStore)();
+
   let findings = config.errors.length;
 
   // The keychain is only consulted for systems that use it, and its absence
@@ -131,25 +131,30 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
     }
   })();
 
+  let sawTlsFailure = false;
+
   const rows = await Promise.all(
     listed.map(async (entry) => {
       const system = config.systems.get(entry.name) as ResolvedSystem;
 
-      let credentialStatus: string = entry.credentialSource ?? 'none';
-      if (entry.credentialSource === 'keychain') {
-        if (backend) {
-          const account = fioriKeychainId(entry.url, entry.client);
-          const secret = await backend.getPassword(FIORI_KEYCHAIN_SERVICE, account);
-          credentialStatus = secret ? 'keychain ok' : 'keychain entry MISSING';
+      // The keychain lookup and the network probe are independent; a keychain
+      // read can cost an out-of-process call, so it overlaps the handshake.
+      const [credentialStatus, reach] = await Promise.all([
+        (async (): Promise<string> => {
+          if (entry.credentialSource !== 'keychain') return entry.credentialSource;
+          if (!backend) {
+            findings += 1;
+            return 'keychain unavailable';
+          }
+          const secret = await backend.getPassword(FIORI_KEYCHAIN_SERVICE, fioriKeychainId(entry.url, entry.client));
           if (!secret) findings += 1;
-        } else {
-          credentialStatus = 'keychain unavailable';
-          findings += 1;
-        }
-      }
+          return secret ? 'keychain ok' : 'keychain entry MISSING';
+        })(),
+        probeReachability(system, deps.probeFetch),
+      ]);
 
-      const reach = await probeReachability(system, deps.probeFetch);
-      if (!reach.startsWith('reachable') || reach.includes(TRUST_STORE_MARKER)) findings += 1;
+      if (!reach.ok) findings += 1;
+      if (reach.tlsFailed) sawTlsFailure = true;
 
       const row = [
         `${entry.name}${entry.isDefault ? ' *' : ''}`,
@@ -157,16 +162,19 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
         entry.client ?? '',
         entry.origin,
         credentialStatus,
-        reach,
+        reach.label,
       ];
 
       if (options.login) {
-        if (entry.credentialSource && reach.startsWith('reachable')) {
+        // 'none' is a real value here, not an absence: listSystems reports it
+        // for a system with no credential source, and attempting a logon there
+        // could only produce a confusing failure.
+        if (entry.credentialSource !== 'none' && reach.ok) {
           const login = await probeLogin(entry.name, system, deps.loginFetch);
           if (login !== 'ok') findings += 1;
           row.push(login);
         } else {
-          row.push('skipped');
+          row.push(entry.credentialSource === 'none' ? 'skipped (no credentials)' : 'skipped');
         }
       }
       return row;
@@ -180,20 +188,18 @@ export async function doctor(options: DoctorOptions = {}, deps: DoctorDeps = {})
     io.out(`${renderTable(headers, rows)}\n`);
     io.out('* = default system\n');
   }
-  if (rows.some((row) => row.some((cell) => cell.includes(TRUST_STORE_MARKER)))) {
+  if (sawTlsFailure) {
+    // Which advice is right depends on whether the OS trust store is in
+    // effect - the certificate is only to blame when it is.
     io.out(
-      `\nThose systems present a certificate from a CA your operating system trusts but Node does not,\n` +
-        'which is the usual situation on a company network. One setting fixes all of them:\n\n' +
-        '  in every MCP client:  "env": { "NODE_USE_SYSTEM_CA": "1" }\n' +
-        '  in a shell:           NODE_USE_SYSTEM_CA=1 mcp-abap-adt doctor\n\n' +
-        'It keeps certificate verification on and validates the real chain, which "allowSelfSigned" does not.\n',
-    );
-  }
-  if (rows.some((row) => row.some((cell) => cell.includes(UNTRUSTED_MARKER)))) {
-    io.out(
-      '\nThose certificates are not trusted even by your operating system, so this is a real\n' +
-        'certificate problem rather than a Node one. Either have the CA installed, or accept it\n' +
-        'per system with "allowSelfSigned": true - which switches verification off for that system.\n',
+      trustStoreLoaded
+        ? '\nThe OS trust store is loaded, so those certificates are not trusted even by your operating system.\n' +
+            'Either have the CA installed, or accept it per system with "allowSelfSigned": true.\n' +
+            'That switches verification off for the system, which is why it comes last.\n'
+        : '\nThe OS trust store could not be loaded here (an older Node, or SAP_USE_SYSTEM_CA=false).\n' +
+            'A certificate from your company CA then fails even though it is fine.\n' +
+            'On older Node, put "NODE_USE_SYSTEM_CA": "1" into the env block of every MCP client.\n' +
+            '"allowSelfSigned": true is the last resort, since it switches verification off.\n',
     );
   }
   if (backendError) io.out(`\nKeychain: ${backendError}\n`);

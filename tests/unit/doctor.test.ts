@@ -96,36 +96,28 @@ describe('doctor', () => {
     expect(text()).toContain('allowSelfSigned');
   });
 
-  it('names the trust store when Node is the only one rejecting the certificate', async () => {
+  it('blames the certificate only when the OS trust store is in effect', async () => {
     await writeFile(
       configFile,
       JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', username: 'U', password: 'P' } } }),
       'utf8',
     );
     const { io, text } = collectingIo();
-    // Fails first, succeeds on the retry - which is what loading the OS trust
-    // store does on a company network.
-    let calls = 0;
-    const failsThenWorks: typeof globalThis.fetch = async () => {
-      calls += 1;
-      if (calls === 1) {
-        throw Object.assign(new TypeError('fetch failed'), {
-          cause: Object.assign(new Error('self-signed'), { code: 'SELF_SIGNED_CERT_IN_CHAIN' }),
-        });
-      }
-      return new Response('logon', { status: 401 });
-    };
 
-    const code = await doctor({ configFile }, { io, probeFetch: failsThenWorks });
+    const code = await doctor({ configFile }, { io, probeFetch: tlsDown, ensureTrustStore: () => true });
 
     expect(code).toBe(1);
-    expect(text()).toContain('needs OS trust store');
-    // The fix is stated once, under the table, rather than in every row.
-    expect(text()).toContain('"NODE_USE_SYSTEM_CA": "1"');
-    expect(text()).toContain('which "allowSelfSigned" does not');
+    expect(text()).toContain('TLS failure (SELF_SIGNED_CERT_IN_CHAIN)');
+    expect(text()).toContain('not trusted even by your operating system');
+    // With the store loaded, the environment variable is not the answer and
+    // must not be offered as one.
+    expect(text()).not.toContain('NODE_USE_SYSTEM_CA');
   });
 
-  it('distinguishes a genuinely untrusted certificate from a missing trust store', async () => {
+  it('points at NODE_USE_SYSTEM_CA when the trust store could not be loaded', async () => {
+    // Old Node without the runtime APIs, or an explicit opt-out: a company CA
+    // then fails even though the certificate is fine, and telling the user to
+    // switch verification off would be the wrong advice.
     await writeFile(
       configFile,
       JSON.stringify({ systems: { dev: { url: 'https://dev.example.com', username: 'U', password: 'P' } } }),
@@ -133,15 +125,30 @@ describe('doctor', () => {
     );
     const { io, text } = collectingIo();
 
-    const code = await doctor({ configFile }, { io, probeFetch: tlsDown });
+    const code = await doctor({ configFile }, { io, probeFetch: tlsDown, ensureTrustStore: () => false });
 
     expect(code).toBe(1);
-    expect(text()).toContain('SELF_SIGNED_CERT_IN_CHAIN), untrusted');
-    expect(text()).toContain('not trusted even by your operating system');
-    // This case is not solved by the environment variable, so it must not be
-    // the advice given.
-    expect(text()).not.toContain('needs OS trust store');
-    expect(text()).not.toContain('NODE_USE_SYSTEM_CA');
+    expect(text()).toContain('"NODE_USE_SYSTEM_CA": "1"');
+    expect(text()).toContain('last resort');
+    expect(text()).not.toContain('not trusted even by your operating system');
+  });
+
+  it('skips the logon for a system without any credential source', async () => {
+    // credentialSource is the string 'none' there - a truthiness check once
+    // sent doctor into a logon attempt that could only fail confusingly.
+    await writeFile(configFile, JSON.stringify({ systems: { dev: { url: 'https://dev.example.com' } } }), 'utf8');
+    const { io, text } = collectingIo();
+    let loginAttempts = 0;
+    const counting: typeof globalThis.fetch = async () => {
+      loginAttempts += 1;
+      return new Response('x', { status: 200 });
+    };
+
+    const code = await doctor({ configFile, login: true }, { io, probeFetch: reachable, loginFetch: counting });
+
+    expect(code).toBe(0);
+    expect(text()).toContain('skipped (no credentials)');
+    expect(loginAttempts).toBe(0);
   });
 
   it('checks whether the keychain actually holds an entry', async () => {
