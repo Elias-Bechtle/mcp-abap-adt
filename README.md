@@ -425,7 +425,7 @@ If the certificate genuinely cannot be validated, add `"allowSelfSigned": true` 
 
 **Company networks: internal CA** — certificates issued by an internal CA live in the operating system's trust store, which Node normally ignores in favour of its own bundled list. The server therefore loads the OS trust store itself at startup: what your browser trusts, it trusts, and verification stays on. No `env` block entry is needed for this.
 
-That auto-loading needs runtime APIs that arrived during Node 22. On an older patch level - `doctor` will tell you with "needs OS trust store" - set the equivalent variable in the client's `env` block: `"NODE_USE_SYSTEM_CA": "1"`. To deliberately restrict the server to Node's bundled list, set `SAP_USE_SYSTEM_CA=false`. `NODE_EXTRA_CA_CERTS` keeps working for a CA bundle that lives in a file.
+That auto-loading needs runtime APIs that arrived during Node 22. On an older patch level, `doctor` says so under its table and the fix is the equivalent variable in the client's `env` block: `"NODE_USE_SYSTEM_CA": "1"`. To deliberately restrict the server to Node's bundled list, set `SAP_USE_SYSTEM_CA=false`. `NODE_EXTRA_CA_CERTS` keeps working for a CA bundle that lives in a file.
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
 
@@ -446,7 +446,7 @@ That auto-loading needs runtime APIs that arrived during Node 22. On an older pa
 
 Credentials, cookies and query bodies are never logged. The session line above appears without the flag as well, since a replaced session explains an extra request that would otherwise look like a hiccup.
 
-The same messages also go to your MCP client through the protocol's own logging capability, which is where you are more likely to see them than in a log file you have to go find. A client can narrow them down with `logging/setLevel`; the MCP Inspector shows them in its log pane. stderr stays the fallback, because it works before the handshake and whatever the client does with notifications.
+The same messages also go to your MCP client through the protocol's own logging capability, which is where you are more likely to see them than in a log file you have to go find; the MCP Inspector shows them in its log pane. Note the direction of the gates: `MCP_ABAP_ADT_DEBUG` decides whether trace lines exist at all, on both channels - a client's `logging/setLevel` can only narrow down what an enabled server emits, not turn tracing on. stderr stays the fallback, because it works before the handshake and whatever the client does with notifications.
 
 Or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
 
