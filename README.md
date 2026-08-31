@@ -32,16 +32,18 @@ Most MCP clients run the server for you; you rarely start it by hand. Point your
 npx -y @janfr/mcp-abap-adt
 ```
 
-A bare `npx -y` resolves `latest` on every start - convenient, but it means silently running whatever was published last, and this server holds your SAP credentials. To make updates a conscious act instead, pin the version and bump it yourself:
+A bare `npx -y` resolves `latest` on every start - convenient, but it means silently running whatever was published last, and this server holds your SAP credentials. Two ways to make updates a conscious act instead:
 
-```bash
-npx -y @janfr/mcp-abap-adt@2.5.0
-```
-
-Installing globally has the same effect - the version only changes when you run the install again:
+**Install globally** (nicest for a permanent setup): the client entry shrinks to `"command": "mcp-abap-adt"` and never changes again, and updating is one deliberate command rather than an edit in every client:
 
 ```bash
 npm install -g @janfr/mcp-abap-adt
+```
+
+Or **pin the version** in the npx call and bump it yourself:
+
+```bash
+npx -y @janfr/mcp-abap-adt@2.5.0
 ```
 
 ### From source
