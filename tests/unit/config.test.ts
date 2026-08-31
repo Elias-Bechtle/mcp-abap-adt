@@ -57,7 +57,7 @@ describe('environment fallback', () => {
       username: 'DEVELOPER',
       password: 'secret',
       allowSelfSigned: false,
-      timeoutMs: 30_000,
+      timeoutMs: 60_000,
     });
   });
 

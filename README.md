@@ -168,7 +168,7 @@ Per-system options:
 | `password` | — | Plaintext password. Works, but warns on startup. |
 | `allowSelfSigned` | `false` | Accept untrusted certificates for this system |
 | `allowFreeSql` | `true` | Allow `ExecuteQuery` to run ad-hoc SELECTs against this system |
-| `timeoutMs` | `30000` | Request timeout |
+| `timeoutMs` | `60000` | Request timeout in milliseconds |
 | `authType` | `basic` | Only Basic authentication is implemented |
 
 **Which system is the default?** In order: the `defaultSystem` you declared, then a system named `default` created from the `SAP_*` variables, then the only system if there is exactly one. Otherwise every tool call must name a system, and calls that don't get an error listing the valid names.

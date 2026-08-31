@@ -46,7 +46,10 @@ export const SystemConfigSchema = z.object({
    * data rather than less. Turn it off where any ad-hoc query is unwelcome.
    */
   allowFreeSql: z.boolean().default(true),
-  timeoutMs: z.number().int().positive().default(30_000),
+  // One minute rather than thirty seconds: a full GetTableContents or a heavy
+  // join legitimately crosses 30s, and the cost of the higher ceiling is only
+  // paid when a host hangs - failures still arrive as fast as ever.
+  timeoutMs: z.number().int().positive().default(60_000),
 });
 
 export type SystemConfig = z.infer<typeof SystemConfigSchema>;
