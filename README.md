@@ -396,7 +396,7 @@ Reachability is probed without authentication, so running it never touches a fai
 - **[Shared configuration](docs/shared-configuration.md)** — the user-level rc file, and team onboarding with `setup --from`.
 - **[Security model](docs/security.md)** — why this server cannot write, the TLS trust-store mechanics, OAuth, and how logon attempts are kept away from SAP lock counters.
 - **[Debugging](docs/debugging.md)** — tracing every ADT call, and driving the server with the MCP Inspector.
-- **[Migrating from mario-andreschak/mcp-abap-adt](MIGRATION.md)** — what changes for a 1.x setup, what can break, and the one-line minimum change. All 16 original tools keep their names and arguments.
+- **[Migrating from mario-andreschak/mcp-abap-adt](docs/migration.md)** — what changes for a 1.x setup, what can break, and the one-line minimum change. All 16 original tools keep their names and arguments.
 - **[Contributing](CONTRIBUTING.md)** — the build, test and release commands, and why a few tooling choices are the way they are.
 
 ## License
