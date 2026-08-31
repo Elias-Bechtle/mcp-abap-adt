@@ -436,3 +436,34 @@ describe('ConnectionRegistry', () => {
     );
   });
 });
+
+const timeoutError = () =>
+  Object.assign(new Error('The operation was aborted due to timeout'), {
+    name: 'TimeoutError',
+  });
+
+describe('timeouts', () => {
+  it('names the budget and both knobs instead of "aborted due to timeout"', async () => {
+    const { connection } = connect(() => timeoutError(), { timeoutMs: 1500 });
+
+    const attempt = connection.request('/sap/bc/adt/programs/programs/X/source/main');
+
+    await expect(attempt).rejects.toThrow(/within 1500 ms/);
+    await expect(attempt).rejects.toThrow(/timeoutMs/);
+  });
+
+  it('reports the per-call budget when one was given', async () => {
+    const { connection } = connect(() => timeoutError(), { timeoutMs: 1500 });
+
+    await expect(connection.request('/sap/bc/adt/x', { timeoutMs: 90_000 })).rejects.toThrow(/within 90000 ms/);
+  });
+
+  it('does not dress a slow CSRF prime up as a token problem', async () => {
+    const { connection } = connect(() => timeoutError());
+
+    const attempt = connection.request('/sap/bc/adt/datapreview/freestyle', { method: 'POST', body: 'q' });
+
+    await expect(attempt).rejects.toThrow(/No answer from system "dev"/);
+    await expect(attempt).rejects.not.toThrow(/CSRF/);
+  });
+});

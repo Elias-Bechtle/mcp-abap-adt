@@ -6,7 +6,14 @@ import type { CredentialProvider, ResolvedCredentials } from '../auth/types.js';
 import type { SystemConfig } from '../config/schema.js';
 import { logDebug, logWarn } from '../lib/log.js';
 import { ensureSystemTrustStore } from '../lib/trustStore.js';
-import { AdtHttpError, describeTlsFailure, findHttpStatus, summarizeHtmlPage } from './errors.js';
+import {
+  AdtHttpError,
+  AdtTimeoutError,
+  describeTlsFailure,
+  findHttpStatus,
+  isTimeout,
+  summarizeHtmlPage,
+} from './errors.js';
 
 /** An array value becomes a repeated query parameter, as ADT facets require. */
 export type QueryValue = string | number | boolean | Array<string | number>;
@@ -224,6 +231,9 @@ export class SapConnection {
         // recovery in request() has to recognise.
         throw error;
       }
+      // A timeout during the prime is the query being slow, not a token
+      // problem; wrapping it as one sent a user chasing the wrong cause.
+      if (error instanceof AdtTimeoutError) throw error;
       throw new Error(
         `Could not obtain a CSRF token for system "${this.name}": ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
@@ -263,7 +273,7 @@ export class SapConnection {
       this.#trace(options.method, path, started, response.status);
       return { status: response.status, headers: response.headers, data: response._data ?? '' };
     } catch (error) {
-      const mapped = this.#mapError(error, path);
+      const mapped = this.#mapError(error, path, options.timeoutMs ?? this.config.timeoutMs);
       this.#trace(options.method, path, started, mapped instanceof AdtHttpError ? mapped.status : 'failed');
       throw mapped;
     }
@@ -293,9 +303,10 @@ export class SapConnection {
     return query;
   }
 
-  #mapError(error: unknown, path: string): Error {
+  #mapError(error: unknown, path: string, budgetMs: number): Error {
     const tlsFailure = describeTlsFailure(error, this.name);
     if (tlsFailure) return tlsFailure;
+    if (isTimeout(error)) return new AdtTimeoutError(this.name, path, budgetMs);
 
     const response = (error as { response?: { status?: number; headers?: Headers; _data?: unknown } }).response;
     if (response?.status) {

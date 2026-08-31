@@ -11,6 +11,32 @@ export class AdtHttpError extends Error {
   }
 }
 
+/** The request ran out of its time budget before SAP answered. */
+export class AdtTimeoutError extends Error {
+  constructor(
+    readonly systemName: string,
+    readonly path: string,
+    readonly budgetMs: number,
+  ) {
+    // The message carries both knobs because it is all the user gets to see:
+    // a bare "aborted due to timeout" told nobody how long the budget was,
+    // let alone that it is configurable.
+    super(
+      `No answer from system "${systemName}" within ${budgetMs} ms (${path}). ` +
+        'A long-running query may simply need more time: pass timeoutMs on the ExecuteQuery call, ' +
+        'or raise "timeoutMs" for this system in the configuration.',
+    );
+    this.name = 'AdtTimeoutError';
+  }
+}
+
+/** Undici signals its timeout as a DOMException named TimeoutError, wrapped by ofetch. */
+export function isTimeout(error: unknown, depth = 0): boolean {
+  if (depth > 5 || !error || typeof error !== 'object') return false;
+  if ((error as { name?: unknown }).name === 'TimeoutError') return true;
+  return isTimeout((error as { cause?: unknown }).cause, depth + 1);
+}
+
 export function isHttpStatus(error: unknown, status: number): error is AdtHttpError {
   return error instanceof AdtHttpError && error.status === status;
 }
