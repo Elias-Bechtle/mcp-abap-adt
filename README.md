@@ -62,7 +62,7 @@ Then point your client at `node` with the absolute path to `dist/index.js`.
 | One system, to try this out | the four `SAP_*` variables in your client's `env` block | [Environment variables](#environment-variables-single-system) |
 | To adopt what SAP Fiori tools already knows | `SAP_IMPORT_FIORI_SYSTEMS=true`, nothing else | [Any setting without a file](#any-setting-without-a-file) |
 | Several systems, with comments | a config file | [Config file](#config-file-any-number-of-systems) |
-| One setup for several MCP clients | a user-level rc file | [`.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) |
+| One setup for several MCP clients, or a whole team | a user-level rc file, by hand or via `setup` | [docs/shared-configuration.md](docs/shared-configuration.md) |
 
 The routes combine, and precedence runs command line → environment → config file → rc file. Wherever they overlap, `systems` merges entry by entry rather than replacing the whole set, so one route can adjust a single system and leave the rest alone.
 
@@ -177,46 +177,9 @@ Per-system options:
 
 **Which system is the default?** In order: the `defaultSystem` you declared, then a system named `default` created from the `SAP_*` variables, then the only system if there is exactly one. Otherwise every tool call must name a system, and calls that don't get an error listing the valid names.
 
-### One config for several MCP clients: `.mcp-abap-adtrc`
+### One config for several clients, or a whole team
 
-Settings in a user-level `.mcp-abap-adtrc` apply to every client on the machine, which is otherwise not possible: a client spawns the server with a filtered environment, so a system-wide `MCP_ABAP_ADT_CONFIG` never reaches it and each client would need its own copy of the settings.
-
-The file lives in `$XDG_CONFIG_HOME` if you have that variable set, otherwise in your home directory. It holds flat `key=value` lines rather than JSON, nesting through dots:
-
-```ini
-defaultSystem=dev
-importFioriSystems=true
-systems.dev.url=https://dev.example.com:44300
-systems.dev.client=100
-systems.dev.keychain=true
-```
-
-Everything else — a config file in the working directory, the environment, the command line — takes precedence over it, in that order.
-
-### Onboarding a whole team: `setup --from`
-
-Because passwords live in the keychain, the system list itself contains no secrets — so it can be shared. Put a file like this in your team's repository or on a share:
-
-```jsonc
-// sap-systems.jsonc - no secrets in here
-{
-  "defaultSystem": "dev",
-  "systems": {
-    "dev": { "url": "https://dev.example.com:44300", "client": "100", "keychain": true },
-    "qas": { "url": "https://qas.example.com:44300", "client": "200", "keychain": true }
-  }
-}
-```
-
-Then a new team member runs one command:
-
-```bash
-npx -y @janfr/mcp-abap-adt setup --from ./sap-systems.jsonc
-```
-
-It folds the list into the user-level rc file (local settings win; the previous file is kept as `.bak`), asks once for username and password, and stores a keychain entry per system — after which both this server and the SAP Fiori tools extension work. `--skip-credentials` writes only the configuration.
-
-Only `.json`/`.jsonc` files are accepted and `extends` is refused: a shared file is edited by whoever can push to the team repository, so it must be data, never code.
+A user-level `.mcp-abap-adtrc` applies to every MCP client on the machine, and `setup --from <shared file>` turns onboarding a colleague into one command: config written, one password prompt, keychain filled. Both are described in [docs/shared-configuration.md](docs/shared-configuration.md).
 
 ### Adjusting an imported system
 
@@ -248,14 +211,7 @@ Credentials live in the Windows Credential Manager, the macOS Keychain or libsec
 
 If you already saved a system in **SAP Fiori tools**, you are done: set `"importFioriSystems": true` and the server picks up the system *and* its password. Systems using an authentication type other than basic are skipped with an explanatory message.
 
-It is off by default deliberately, rather than to save you a line. Turning it on gives a model read access to every system you have saved, production among them, and that is a decision to make rather than to inherit. To make it findable anyway, a server with nothing configured names the systems it could have adopted:
-
-```
-No SAP system is configured. 2 systems saved by the SAP Fiori tools VS Code
-extension could be used (DEV100, PRD400): set "importFioriSystems": true ...
-```
-
-Only the store's metadata is read for that, never a credential.
+It is off by default deliberately: turning it on gives a model read access to every system you have saved, production among them — a decision to make rather than to inherit ([why, in full](docs/security.md#why-importfiorisystems-is-off-by-default)). A server with nothing configured names the systems it could adopt, so the option stays findable.
 
 Otherwise store the password yourself:
 
@@ -291,7 +247,7 @@ All clients follow the same shape: a command to run, and an `env` block for what
 
 **The examples below keep the password out of the client's config**, because a password sitting in a shared or synced JSON file is the thing this fork exists to avoid. They rely on the OS keychain, which is filled either by the SAP Fiori tools VS Code extension or by `store-credentials` — see [Credentials](#4-credentials). The `SAP_*` variables with a plaintext password are shown after each one; they work, and for a throwaway sandbox they are the shortest thing that does.
 
-If you use more than one client — say Claude Desktop and Claude Code — put the systems in a [user-level `.mcp-abap-adtrc`](#one-config-for-several-mcp-clients-mcp-abap-adtrc) and keep every client's entry down to `npx -y @janfr/mcp-abap-adt`. Then there is one place to change a system rather than one per client.
+If you use more than one client — say Claude Desktop and Claude Code — put the systems in a [user-level `.mcp-abap-adtrc`](docs/shared-configuration.md) and keep every client's entry down to the bare command. Then there is one place to change a system rather than one per client.
 
 `NODE_*` flags are Node's own and would have to be repeated in each client's `env` block, since a client passes on only a short list of variables. The one that used to matter here, `NODE_USE_SYSTEM_CA`, is no longer needed: the server loads the operating system's trust store by itself.
 
@@ -409,9 +365,7 @@ SELECT COUNT(*) AS cnt FROM t000
 
 Dialect notes, since this is ABAP SQL and not the SQL you may expect: exactly one SELECT, no trailing semicolon, `ASCENDING`/`DESCENDING` instead of `ASC`/`DESC`, and no `LIMIT` clause — use the `maxRows` argument, which defaults to 100 and is capped at 5000.
 
-Nothing here can write. SAP embeds the statement in `... INTO TABLE @DATA(...) UP TO n ROWS`, so anything but a query is a syntax error; SAP rejects a second statement itself; and this server additionally requires the text to start with `SELECT` or `WITH`. Every query runs under the SAP authorisations of the configured user, which remains the real boundary on what can be read.
-
-To forbid ad-hoc queries against a system, set `"allowFreeSql": false` for it (or `SAP_ALLOW_FREE_SQL=false` for the environment-built one). Note what that actually achieves: `GetTableContents` still works and reads whole tables with `SELECT *`, so turning free SQL off makes a model read **more** data, not less. It is worth doing only where any unplanned query is unwelcome for its own sake.
+Nothing here can write — SAP itself turns anything but a query into a syntax error, and the server checks again on top. Every query runs under the SAP authorisations of the configured user, which remains the real boundary on what can be read. `"allowFreeSql": false` forbids ad-hoc queries per system, with a caveat worth reading first: [the security model](docs/security.md#read-only-by-design) explains why that setting makes a model read more data, not less.
 
 ## 7. Troubleshooting
 
@@ -423,13 +377,7 @@ npx -y @janfr/mcp-abap-adt doctor
 
 Reachability is probed without authentication, so running it never touches a failed-logon counter. Add `--login` for exactly one real logon attempt per system when you want the password itself verified. Inside a chat, `ListSystems` answers the configuration half of the same questions.
 
-**"TLS certificate verification failed"** — the system's certificate is not trusted by the server process. Before switching verification off, check the next entry: in a company network the certificate is usually fine and only the trust store is missing.
-
-If the certificate genuinely cannot be validated, add `"allowSelfSigned": true` to that system, or set `SAP_ALLOW_SELF_SIGNED=true` if you configure through environment variables. For a system that came from SAP Fiori tools, add an [override entry](#adjusting-an-imported-system) rather than redeclaring it. Version 1.x disabled verification for everyone; this version makes it a per-system decision.
-
-**Company networks: internal CA** — certificates issued by an internal CA live in the operating system's trust store, which Node normally ignores in favour of its own bundled list. The server therefore loads the OS trust store itself at startup: what your browser trusts, it trusts, and verification stays on. No `env` block entry is needed for this.
-
-That auto-loading needs runtime APIs that arrived during Node 22. On an older patch level, `doctor` says so under its table and the fix is the equivalent variable in the client's `env` block: `"NODE_USE_SYSTEM_CA": "1"`. To deliberately restrict the server to Node's bundled list, set `SAP_USE_SYSTEM_CA=false`. `NODE_EXTRA_CA_CERTS` keeps working for a CA bundle that lives in a file.
+**"TLS certificate verification failed"** — on a company network the certificate is usually fine: the server loads the operating system's trust store automatically, so what your browser trusts, it trusts. `doctor` tells the two cases apart. If the certificate genuinely cannot be validated (a self-signed sandbox), `"allowSelfSigned": true` on that system — or an [override entry](#adjusting-an-imported-system) for an imported one — switches verification off there. Mechanics, older-Node fallback and the opt-out live in [docs/security.md](docs/security.md#tls-and-the-trust-stores).
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
 
@@ -441,43 +389,13 @@ That auto-loading needs runtime APIs that arrived during Node 22. On an older pa
 
 **"The session for system … had expired, and the re-login was rejected"** — the server recovers from an expired ADT session by itself (logging off in SAP GUI kills it, since both share the user's security session): it drops the dead session and retries once with the stored credentials. This message means that retry was rejected too, so the credentials themselves no longer work — the password changed or the user is locked. Update the keychain entry with `store-credentials` or in SAP Fiori tools. The server deliberately never retries more than once, to keep a stale password from locking the user out.
 
-**Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1`. Every ADT call then appears on stderr with its status and duration, which is what makes the server's own retries visible:
-
-```
-[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 200 in 183ms
-[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 401 in 23ms
-[mcp-abap-adt] session for system "DEV" was rejected with 401; dropped it and retrying once.
-[mcp-abap-adt] DEV GET /sap/bc/adt/discovery -> 200 in 78ms
-```
-
-Credentials, cookies and query bodies are never logged. The session line above appears without the flag as well, since a replaced session explains an extra request that would otherwise look like a hiccup.
-
-The same messages also go to your MCP client through the protocol's own logging capability, which is where you are more likely to see them than in a log file you have to go find; the MCP Inspector shows them in its log pane. Note the direction of the gates: `MCP_ABAP_ADT_DEBUG` decides whether trace lines exist at all, on both channels - a client's `logging/setLevel` can only narrow down what an enabled server emits, not turn tracing on. stderr stays the fallback, because it works before the handshake and whatever the client does with notifications.
-
-Or drive the server with the [MCP Inspector](https://github.com/modelcontextprotocol/inspector):
-
-```bash
-npm run inspect
-```
-
-That builds first and opens the inspector's web UI against the freshly built server. `npm run inspect:cli` does the same without a browser, which is handy for a quick check:
-
-```bash
-npm run inspect:cli -- --method tools/list
-npm run inspect:cli -- --method tools/call --tool-name ListSystems
-npm run inspect:cli -- --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
-```
-
-Both pick up the config file from the working directory, so run them from the project root.
-
-The inspector spawns the server the same way a real MCP client does, **including the reduced set of environment variables**. That makes it a faithful reproduction rather than a friendlier environment: whatever fails in your client fails here too. Variables go in the same way a client would pass them:
-
-```bash
-npm run inspect:cli -- -e SAP_DEFAULT_SYSTEM=dev --method tools/call --tool-name GetProgram --tool-arg program_name=RSABAPPROGRAM
-```
+**Nothing works and you want to poke at it directly** — set `MCP_ABAP_ADT_DEBUG=1` to trace every ADT call with status and duration, on stderr and as MCP log notifications; credentials, cookies and query bodies are never logged. Tracing details and how to drive the server with the MCP Inspector: [docs/debugging.md](docs/debugging.md).
 
 ## 8. Further reading
 
+- **[Shared configuration](docs/shared-configuration.md)** — the user-level rc file, and team onboarding with `setup --from`.
+- **[Security model](docs/security.md)** — why this server cannot write, the TLS trust-store mechanics, OAuth, and how logon attempts are kept away from SAP lock counters.
+- **[Debugging](docs/debugging.md)** — tracing every ADT call, and driving the server with the MCP Inspector.
 - **[Migrating from mario-andreschak/mcp-abap-adt](MIGRATION.md)** — what changes for a 1.x setup, what can break, and the one-line minimum change. All 16 original tools keep their names and arguments.
 - **[Contributing](CONTRIBUTING.md)** — the build, test and release commands, and why a few tooling choices are the way they are.
 
