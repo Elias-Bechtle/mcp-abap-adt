@@ -26,7 +26,7 @@ npm publish
 
 Publishing happens manually from the maintainer's machine with npm 2FA - deliberately: no long-lived automation token exists whose theft could publish in this package's name. Keep it that way, and keep 2FA on.
 
-changelogen bumps only package.json. `server.json`, the MCP registry manifest, carries the version twice and has to be bumped by hand in the same commit - it silently went stale for four releases before this sentence existed.
+changelogen bumps only package.json. `server.json`, the MCP registry manifest, carries the version twice; scripts/release.mjs syncs it into the same release commit and re-points the tag, because it silently went stale for four releases when this was a by-hand rule.
 
 The `changelog.types` map in `package.json` hides `test`, `style` and `ci` commits: they cannot change anything for someone installing the package, so they do not belong in its changelog. Breaking changes are collected into their own section regardless of type, from either a `!` marker or a `BREAKING CHANGE:` footer.
 

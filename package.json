@@ -36,7 +36,7 @@
     "fmt:check": "oxfmt --check src tests vitest.config.ts",
     "inspect": "npm run build && npx -y @modelcontextprotocol/inspector@2 node dist/index.js",
     "inspect:cli": "npm run build && npx -y @modelcontextprotocol/inspector@2 --cli node dist/index.js",
-    "release": "changelogen --release --clean"
+    "release": "node scripts/release.mjs"
   },
   "keywords": [
     "abap",
