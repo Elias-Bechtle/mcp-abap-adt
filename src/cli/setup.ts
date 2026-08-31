@@ -134,13 +134,17 @@ export async function setup(options: SetupOptions, deps: SetupDeps = {}): Promis
     // no rc file yet - the normal case on a fresh machine
   }
 
-  // The systems as normalised above (keychain defaulting included), so what
-  // the rc file says matches what the credential step below acts on.
+  // Written from the raw entries, not the parsed ones: parsing fills every
+  // schema default, and serialising those would freeze today's defaults into
+  // each colleague's rc file - a later release changing a default would never
+  // reach them. Only the keychain normalisation from above is added on top.
   const normalisedSystems = Object.fromEntries(
-    teamSystems.map(([name, system]) => {
-      const { origin: _origin, ...rest } = system;
-      return [name, rest];
-    }),
+    Object.entries(team.systems).map(([name, value]) => [
+      name,
+      keychainDefaulted.includes(name)
+        ? { ...(value as Record<string, unknown>), keychain: true }
+        : (value as Record<string, unknown>),
+    ]),
   );
   const merged = defu(existing, {
     ...(team.defaultSystem ? { defaultSystem: team.defaultSystem } : {}),
