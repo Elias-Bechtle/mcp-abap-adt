@@ -1,4 +1,4 @@
-import { loadKeychainBackend } from '../auth/providers/keychain.js';
+import { loadKeychainBackend, parseSecret } from '../auth/providers/keychain.js';
 import type { KeychainBackend } from '../auth/types.js';
 import { FIORI_KEYCHAIN_SERVICE, fioriKeychainId } from '../config/fiori.js';
 import { loadAppConfig } from '../config/load.js';
@@ -40,17 +40,14 @@ export interface StoreCredentialsOptions {
   configFile?: string;
 }
 
-/** Reads the username out of an existing entry, tolerating the bare-string form. */
-async function existingUsername(backend: KeychainBackend, account: string): Promise<string | undefined> {
+/** What an existing entry knows, decoded by the same parser the provider uses. */
+async function existingEntry(
+  backend: KeychainBackend,
+  account: string,
+): Promise<{ exists: boolean; username?: string }> {
   const secret = await backend.getPassword(FIORI_KEYCHAIN_SERVICE, account);
-  if (!secret) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(secret);
-    const username = (parsed as { username?: unknown } | null)?.username;
-    return typeof username === 'string' ? username : undefined;
-  } catch {
-    return undefined;
-  }
+  if (!secret) return { exists: false };
+  return { exists: true, username: parseSecret(secret).username };
 }
 
 export interface CredentialEntry {
@@ -91,10 +88,15 @@ export async function storeBulk(
   const missing: Array<{ systemName: string; account: string }> = [];
   const seenUsernames = new Map<string, number>();
 
+  const existing = new Set<string>();
   const resolved = await Promise.all(
     targets.map(async ([name, system]) => {
       const account = fioriKeychainId(system.url, system.client);
-      const username = options.username ?? (await existingUsername(backend, account)) ?? system.username;
+      const entry = await existingEntry(backend, account);
+      if (entry.exists) existing.add(account);
+      // The entry's own username wins, as documented: mixed-user landscapes
+      // stay intact, and --username only fills entries that have no name yet.
+      const username = entry.username ?? options.username ?? system.username;
       return { name, account, username };
     }),
   );
@@ -132,7 +134,8 @@ export async function storeBulk(
 
   io.out('About to write these keychain entries:\n');
   for (const entry of planned) {
-    io.out(`  ${entry.systemName}  ->  ${entry.username} @ ${entry.account}\n`);
+    const note = existing.has(entry.account) ? '  (replaces the existing entry)' : '';
+    io.out(`  ${entry.systemName}  ->  ${entry.username} @ ${entry.account}${note}\n`);
   }
   // One confirmation for the whole batch. These are the entries the Fiori
   // tools extension reads too, which is worth being conscious of once - but
@@ -176,6 +179,15 @@ export async function storeCredentials(options: StoreCredentialsOptions, deps: C
         return 2;
       }
       targets = names.map((name) => [name, config.systems.get(name) as ResolvedSystem]);
+      for (const [name, system] of targets) {
+        if (!system.keychain) {
+          // Storing is harmless, but the server will not read the entry until
+          // the system opts into the keychain - silence here cost a user a
+          // confused password rotation.
+          io.err(`note: "${name}" has no "keychain": true in its configuration; the server will not use this entry until it does.
+`);
+        }
+      }
     } else {
       // --all means "everything that reads its password from the keychain";
       // systems with inline or env credentials have nothing stored there.

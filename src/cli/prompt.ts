@@ -28,6 +28,15 @@ export function interpretYesNo(answer: string, defaultYes: boolean): boolean {
  * password they typed).
  */
 export async function promptYesNo(question: string, defaultYes = false): Promise<boolean> {
+  // Piped input has usually been consumed by the secret prompt by the time a
+  // confirmation runs; waiting on the ended stream would hang forever. Piping
+  // is scripting, and a script gets the documented default.
+  if (!process.stdin.isTTY) {
+    process.stdout
+      .write(`${question} ${defaultYes ? '[Y/n]' : '[y/N]'} ${defaultYes ? 'y' : 'n'} (no terminal, using the default)
+`);
+    return defaultYes;
+  }
   const answer = await promptLine(`${question} ${defaultYes ? '[Y/n]' : '[y/N]'} `);
   return interpretYesNo(answer, defaultYes);
 }

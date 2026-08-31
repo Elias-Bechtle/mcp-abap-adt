@@ -30,7 +30,7 @@ export function loadKeychainBackend(): Promise<KeychainBackend> {
  * sensitive fields. A bare string is accepted as the password so a manually
  * created entry still works.
  */
-function parseSecret(secret: string): { username?: string; password?: string } {
+export function parseSecret(secret: string): { username?: string; password?: string } {
   try {
     const parsed: unknown = JSON.parse(secret);
     if (parsed && typeof parsed === 'object') {

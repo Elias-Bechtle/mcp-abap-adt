@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { interpretYesNo } from '../../src/cli/prompt.js';
+import { interpretYesNo, promptYesNo } from '../../src/cli/prompt.js';
 import { storeCredentials } from '../../src/cli/storeCredentials.js';
 
 let workDir: string;
@@ -162,6 +162,74 @@ describe('store-credentials --all', () => {
 
     expect(code).toBe(2);
     expect(err.join('')).toContain('"keychain": true');
+  });
+});
+
+describe('bulk safety', () => {
+  const twoSystems = {
+    systems: {
+      dev: { url: 'https://dev.example.com', client: '100', keychain: true },
+      qas: { url: 'https://qas.example.com', client: '200', keychain: true },
+    },
+  };
+
+  it('lets an existing entry keep its username even against --username', async () => {
+    // Documented: mixed-user landscapes stay intact; the flag only fills gaps.
+    await writeFile(configFile, JSON.stringify(twoSystems), 'utf8');
+    const { backend, store } = fakeBackend({
+      'https://qas.example.com/200': JSON.stringify({ username: 'SAP_SUPPORT', password: 'old' }),
+    });
+    const { io } = scriptedIo({ secret: ['pw'], yesNo: [true] });
+
+    const code = await storeCredentials({ all: true, username: 'JFROEHLICH', configFile }, { backend, io });
+
+    expect(code).toBe(0);
+    expect(JSON.parse(store.get('https://qas.example.com/200') ?? '')).toMatchObject({ username: 'SAP_SUPPORT' });
+    expect(JSON.parse(store.get('https://dev.example.com/100') ?? '')).toMatchObject({ username: 'JFROEHLICH' });
+  });
+
+  it('marks entries that already exist in the summary', async () => {
+    await writeFile(configFile, JSON.stringify(twoSystems), 'utf8');
+    const { backend } = fakeBackend({
+      'https://dev.example.com/100': JSON.stringify({ username: 'U', password: 'old' }),
+    });
+    const { io, out } = scriptedIo({ line: ['U'], secret: ['pw'], yesNo: [true] });
+
+    await storeCredentials({ all: true, configFile }, { backend, io });
+
+    const summary = out.join('');
+    expect(summary).toContain('dev  ->  U @ https://dev.example.com/100  (replaces the existing entry)');
+    expect(summary).not.toContain('qas.example.com/200  (replaces');
+  });
+
+  it('names entries the server will not read when --systems bypasses the keychain filter', async () => {
+    await writeFile(
+      configFile,
+      JSON.stringify({
+        systems: {
+          dev: { url: 'https://dev.example.com', keychain: true },
+          prd: { url: 'https://prd.example.com', password: 'inline' },
+        },
+      }),
+      'utf8',
+    );
+    const { backend } = fakeBackend();
+    const { io, err } = scriptedIo({ line: ['U'], secret: ['pw'], yesNo: [true] });
+
+    const code = await storeCredentials({ systems: 'dev,prd', configFile }, { backend, io });
+
+    expect(code).toBe(0);
+    expect(err.join('')).toContain('"prd" has no "keychain": true');
+  });
+});
+
+describe('prompts without a terminal', () => {
+  it('promptYesNo takes the offered default instead of waiting forever', async () => {
+    // vitest runs without a TTY - exactly the piped situation that once hung
+    // after promptSecret had consumed the only stdin line.
+    expect(process.stdin.isTTY).toBeFalsy();
+    await expect(promptYesNo('proceed?', true)).resolves.toBe(true);
+    await expect(promptYesNo('proceed?', false)).resolves.toBe(false);
   });
 });
 
