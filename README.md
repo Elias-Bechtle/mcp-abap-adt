@@ -259,7 +259,7 @@ Otherwise store the password yourself:
 mcp-abap-adt store-credentials --system dev
 ```
 
-It asks for the username and a password that is not echoed. An entry that already exists is only replaced after you confirm, because it may be one the Fiori tools extension wrote.
+It asks for the username and a password that is not echoed (`--username <user>` skips the first question, also in the bulk and setup flows). An entry that already exists is only replaced after you confirm, because it may be one the Fiori tools extension wrote.
 
 When one password serves several systems — the usual case with a central user administration — rotate them all at once:
 
