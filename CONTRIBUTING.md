@@ -24,6 +24,8 @@ npm publish
 
 `changelogen --release --clean` refuses to run on a dirty working tree, works out the semver bump from the commits since the last tag, and writes the new section into `CHANGELOG.md`. It does not push, so there is a moment to review the commit and tag before anything leaves the machine.
 
+Publishing happens manually from the maintainer's machine with npm 2FA - deliberately: no long-lived automation token exists whose theft could publish in this package's name. Keep it that way, and keep 2FA on.
+
 changelogen bumps only package.json. `server.json`, the MCP registry manifest, carries the version twice and has to be bumped by hand in the same commit - it silently went stale for four releases before this sentence existed.
 
 The `changelog.types` map in `package.json` hides `test`, `style` and `ci` commits: they cannot change anything for someone installing the package, so they do not belong in its changelog. Breaking changes are collected into their own section regardless of type, from either a `!` marker or a `BREAKING CHANGE:` footer.

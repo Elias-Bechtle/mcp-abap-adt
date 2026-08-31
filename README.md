@@ -32,7 +32,13 @@ Most MCP clients run the server for you; you rarely start it by hand. Point your
 npx -y @janfr/mcp-abap-adt
 ```
 
-To install it globally instead:
+A bare `npx -y` resolves `latest` on every start - convenient, but it means silently running whatever was published last, and this server holds your SAP credentials. To make updates a conscious act instead, pin the version and bump it yourself:
+
+```bash
+npx -y @janfr/mcp-abap-adt@2.5.0
+```
+
+Installing globally has the same effect - the version only changes when you run the install again:
 
 ```bash
 npm install -g @janfr/mcp-abap-adt
@@ -428,6 +434,8 @@ If the certificate genuinely cannot be validated, add `"allowSelfSigned": true` 
 That auto-loading needs runtime APIs that arrived during Node 22. On an older patch level, `doctor` says so under its table and the fix is the equivalent variable in the client's `env` block: `"NODE_USE_SYSTEM_CA": "1"`. To deliberately restrict the server to Node's bundled list, set `SAP_USE_SYSTEM_CA=false`. `NODE_EXTRA_CA_CERTS` keeps working for a CA bundle that lives in a file.
 
 **"No keychain entry for system ..."** — run `mcp-abap-adt store-credentials --system <name>`, or save the system in SAP Fiori tools. Note that the entry is keyed by URL *and* client, so `https://host` and `https://host/100` are different entries.
+
+**"No answer from system ... within ... ms"** — the request ran out of its time budget. Every request gets 60 seconds by default. For one heavy query, pass `timeoutMs` on the `ExecuteQuery` call (up to 10 minutes) — a model reading the error can retry with it directly. If a system is generally slow, raise `"timeoutMs"` in its configuration entry instead, which applies to every tool.
 
 **"No system was given and no default system is configured"** — you have more than one system and no `defaultSystem`. Either set one or pass `system` in the call.
 
