@@ -35,7 +35,9 @@ let connection: SapConnection;
 
 function expectTextResult(result: ToolResult) {
   expect(result.content[0]?.text).toBeTruthy();
-  expect(result.isError).toBe(false);
+  // The custom message surfaces what SAP actually said on failure, instead of
+  // just "true is not false" - that text is the only thing worth reading here.
+  expect(result.isError, result.content[0]?.text).toBe(false);
   expect(result.content[0].type).toBe('text');
 }
 
