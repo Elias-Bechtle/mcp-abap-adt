@@ -490,6 +490,13 @@ describe('GetWhereUsed', () => {
   it('falls back to the raw XML for an unrecognised response shape', async () => {
     const { result } = await callHandler(
       (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZTAB' }),
+      () => ({ body: '<somethingElse/>' }),
+    );
+
+    expect(textOf(result)).toBe('<somethingElse/>');
+  });
+});
+
 describe('GetPackage', () => {
   const nodeStructure = `<?xml version="1.0" encoding="utf-8"?>
 <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
