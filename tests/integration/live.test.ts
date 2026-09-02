@@ -1,8 +1,11 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { loadAppConfig } from '../../src/config/load.js';
 import { ConnectionRegistry } from '../../src/connection/registry.js';
 import type { SapConnection } from '../../src/connection/SapConnection.js';
+import { createServer } from '../../src/server.js';
 
 import { handleGetProgram } from '../../src/handlers/handleGetProgram.js';
 import { handleGetClass } from '../../src/handlers/handleGetClass.js';
@@ -176,5 +179,52 @@ describe.skipIf(!runLive)('live ADT integration', () => {
     });
     expectTextResult(result);
     expect(result.content[0].text).toContain('TRKORR');
+  });
+
+  /**
+   * Every other test in this file calls a handler function directly, which
+   * proves the ADT communication works but skips the MCP layer entirely: tool
+   * registration, zod schema validation, and JSON-RPC (de)serialization. This
+   * is the one test that goes through all of it - a real McpServer built by
+   * the same `createServer` production uses, talking to a real MCP Client,
+   * reaching this real SAP system. The transport is in-memory rather than
+   * stdio, which is the only difference from how Claude Desktop or Claude Code
+   * would actually connect; the protocol on top of it is identical.
+   */
+  describe('the three new tools over the real MCP protocol', () => {
+    it('answers GetSystemInfo, CheckSyntax and GetWhereUsed through a real MCP client', async () => {
+      const client = new Client({ name: 'manual-verification', version: '1.0.0' });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await Promise.all([client.connect(clientTransport), createServer(registry).connect(serverTransport)]);
+
+      type ContentText = { content: Array<{ text: string }>; isError?: boolean };
+
+      const systemInfo = (await client.callTool({ name: 'GetSystemInfo', arguments: {} })) as ContentText;
+      console.log('\n=== GetSystemInfo (via MCP protocol) ===\n' + systemInfo.content[0].text);
+      expect(systemInfo.isError).toBe(false);
+      expect(systemInfo.content[0].text).toContain('RELEASE');
+
+      const checkSyntax = (await client.callTool({
+        name: 'CheckSyntax',
+        arguments: {
+          object_type: 'program',
+          object_name: 'RSABAPPROGRAM',
+          source: 'REPORT rsabapprogram.\nDATA lv_text TYPE strong.',
+        },
+      })) as ContentText;
+      console.log('\n=== CheckSyntax (via MCP protocol) ===\n' + checkSyntax.content[0].text);
+      expect(checkSyntax.isError).toBe(false);
+      expect(checkSyntax.content[0].text).toContain('[E]');
+
+      const whereUsed = (await client.callTool({
+        name: 'GetWhereUsed',
+        arguments: { object_type: 'interface', object_name: 'IF_T100_MESSAGE' },
+      })) as ContentText;
+      console.log('\n=== GetWhereUsed (via MCP protocol) ===\n' + whereUsed.content[0].text);
+      expect(whereUsed.isError).toBe(false);
+      expect(whereUsed.content[0].text).not.toBe('No usages found.');
+
+      await client.close();
+    });
   });
 });
