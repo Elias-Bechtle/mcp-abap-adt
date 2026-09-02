@@ -4,6 +4,7 @@ import type { SapConnection } from '../../src/connection/SapConnection.js';
 import type { ToolResult } from '../../src/lib/result.js';
 import { fakeConnection, type FakeResponse, type RecordedCall } from '../helpers/fakeConnection.js';
 
+import { handleCheckSyntax } from '../../src/handlers/handleCheckSyntax.js';
 import { handleExecuteQuery } from '../../src/handlers/handleExecuteQuery.js';
 import { handleGetBehaviorDefinition } from '../../src/handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from '../../src/handlers/handleGetCDSView.js';
@@ -359,6 +360,57 @@ describe('GetSystemInfo', () => {
     expect(calls[0].method).toBe('POST');
     expect(calls[0].url.pathname).toBe('/sap/bc/adt/datapreview/freestyle');
     expect(calls[0].body).toBe('SELECT COMPONENT, RELEASE, EXTRELEASE FROM CVERS ORDER BY COMPONENT');
+  });
+});
+
+describe('CheckSyntax', () => {
+  const oneError =
+    '<chkrun:checkRunReports xmlns:chkrun="http://www.sap.com/adt/checkrun">' +
+    '<chkrun:checkReport>' +
+    '<chkrun:checkMessageList>' +
+    '<chkrun:checkMessage chkrun:uri="/sap/bc/adt/programs/programs/ZFOO/source/main#start=3,7" ' +
+    'chkrun:type="E" chkrun:shortText="Field &quot;LV_FOO&quot; is unknown."/>' +
+    '</chkrun:checkMessageList>' +
+    '</chkrun:checkReport>' +
+    '</chkrun:checkRunReports>';
+
+  it('posts the base64-encoded source against the object uri', async () => {
+    const { result, calls } = await callHandler(
+      (c) => handleCheckSyntax(c, { object_type: 'program', object_name: 'ZFOO', source: 'REPORT zfoo.' }),
+      () => ({ body: '<chkrun:checkRunReports xmlns:chkrun="http://www.sap.com/adt/checkrun"/>' }),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/checkruns');
+    expect(calls[0].url.searchParams.get('reporters')).toBe('abapCheckRun');
+    expect(calls[0].body).toContain('adtcore:uri="/sap/bc/adt/programs/programs/ZFOO/source/main"');
+    expect(calls[0].body).toContain(Buffer.from('REPORT zfoo.').toString('base64'));
+    expect(textOf(result)).toBe('No syntax errors or warnings found.');
+  });
+
+  it('builds the class and interface uris', async () => {
+    const { calls: classCalls } = await callHandler(
+      (c) => handleCheckSyntax(c, { object_type: 'class', object_name: 'ZCL_FOO', source: 'CLASS zcl_foo.' }),
+      () => ({ body: '<chkrun:checkRunReports xmlns:chkrun="http://www.sap.com/adt/checkrun"/>' }),
+    );
+    expect(classCalls[0].body).toContain('/sap/bc/adt/oo/classes/ZCL_FOO/source/main');
+
+    const { calls: interfaceCalls } = await callHandler(
+      (c) => handleCheckSyntax(c, { object_type: 'interface', object_name: 'ZIF_FOO', source: 'INTERFACE zif_foo.' }),
+      () => ({ body: '<chkrun:checkRunReports xmlns:chkrun="http://www.sap.com/adt/checkrun"/>' }),
+    );
+    expect(interfaceCalls[0].body).toContain('/sap/bc/adt/oo/interfaces/ZIF_FOO/source/main');
+  });
+
+  it('parses a check message, recovering line and column from the uri fragment', async () => {
+    const { result } = await callHandler(
+      (c) => handleCheckSyntax(c, { object_type: 'program', object_name: 'ZFOO', source: 'REPORT zfoo. lv_foo = 1.' }),
+      () => ({ body: oneError }),
+    );
+
+    expect(textOf(result)).toBe('[E] line 3, col 7: Field "LV_FOO" is unknown.');
   });
 });
 

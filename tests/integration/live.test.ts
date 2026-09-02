@@ -18,6 +18,7 @@ import { handleGetTypeInfo } from '../../src/handlers/handleGetTypeInfo.js';
 import { handleGetInterface } from '../../src/handlers/handleGetInterface.js';
 import { handleGetTransaction } from '../../src/handlers/handleGetTransaction.js';
 import { handleSearchObject } from '../../src/handlers/handleSearchObject.js';
+import { handleCheckSyntax } from '../../src/handlers/handleCheckSyntax.js';
 import { handleGetWhereUsed } from '../../src/handlers/handleGetWhereUsed.js';
 import type { ToolResult } from '../../src/lib/result.js';
 
@@ -125,6 +126,33 @@ describe.skipIf(!runLive)('live ADT integration', () => {
   // Exercises the CSRF token and cookie round trip, which no GET-only test covers.
   it('retrieves table contents', async () => {
     expectTextResult(await handleGetTableContents(connection, { table_name: 'DD02L', max_rows: 5 }));
+  });
+
+  // This is the first live test that checks unsaved source rather than what is
+  // active in the system - the two results below pin down that checkruns
+  // actually evaluates `source`, not RSABAPPROGRAM's real (clean) source.
+  describe('CheckSyntax', () => {
+    it('reports no messages for syntactically valid source', async () => {
+      const result = await handleCheckSyntax(connection, {
+        object_type: 'program',
+        object_name: 'RSABAPPROGRAM',
+        source: 'REPORT rsabapprogram.\nDATA lv_text TYPE string.\nlv_text = |hello|.',
+      });
+      console.log('\n=== CheckSyntax (valid source) ===\n' + result.content[0].text);
+      expectTextResult(result);
+      expect(result.content[0].text).toBe('No syntax errors or warnings found.');
+    });
+
+    it('reports an error for a deliberately broken statement', async () => {
+      const result = await handleCheckSyntax(connection, {
+        object_type: 'program',
+        object_name: 'RSABAPPROGRAM',
+        source: 'REPORT rsabapprogram.\nDATA lv_text TYPE strong.',
+      });
+      console.log('\n=== CheckSyntax (broken source) ===\n' + result.content[0].text);
+      expectTextResult(result);
+      expect(result.content[0].text).toContain('[E]');
+    });
   });
 
   // IF_T100_MESSAGE is implemented across the system, so a real answer must

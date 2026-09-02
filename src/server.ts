@@ -6,6 +6,7 @@ import type { ConnectionRegistry } from './connection/registry.js';
 import { return_error, type ToolResult } from './lib/result.js';
 import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
+import { handleCheckSyntax } from './handlers/handleCheckSyntax.js';
 import { handleExecuteQuery } from './handlers/handleExecuteQuery.js';
 import { handleGetBehaviorDefinition } from './handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from './handlers/handleGetCDSView.js';
@@ -202,6 +203,18 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       service_definition_name: z.string().describe('Name of the RAP Service Definition (e.g. Z_MY_SERVICE)'),
     },
     handleGetServiceDefinition,
+  ),
+  defineTool(
+    'CheckSyntax',
+    'Run a non-activating ABAP syntax check against a program, class, or interface. Checks the given ' +
+      "source text as if it replaced the object's current source - nothing is saved or activated. " +
+      'Useful to validate generated or edited code before it is applied through some other channel.',
+    {
+      object_type: z.enum(['program', 'class', 'interface']).describe('Kind of the ABAP object source belongs to'),
+      object_name: z.string().describe('Name of the existing ABAP object to check the source against'),
+      source: z.string().describe('The ABAP source text to check (may differ from what is currently active)'),
+    },
+    handleCheckSyntax,
   ),
   defineTool(
     'GetWhereUsed',
