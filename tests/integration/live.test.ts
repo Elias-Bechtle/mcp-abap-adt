@@ -9,6 +9,7 @@ import { handleGetClass } from '../../src/handlers/handleGetClass.js';
 import { handleGetFunctionGroup } from '../../src/handlers/handleGetFunctionGroup.js';
 import { handleGetFunction } from '../../src/handlers/handleGetFunction.js';
 import { handleGetTable } from '../../src/handlers/handleGetTable.js';
+import { handleGetSystemInfo } from '../../src/handlers/handleGetSystemInfo.js';
 import { handleGetStructure } from '../../src/handlers/handleGetStructure.js';
 import { handleGetTableContents } from '../../src/handlers/handleGetTableContents.js';
 import { handleGetPackage } from '../../src/handlers/handleGetPackage.js';
@@ -84,6 +85,13 @@ describe.skipIf(!runLive)('live ADT integration', () => {
 
   it('retrieves a table', async () => {
     expectTextResult(await handleGetTable(connection, { table_name: 'DD02L' }));
+  });
+
+  it('retrieves system release and component info', async () => {
+    const result = await handleGetSystemInfo(connection);
+    console.log('\n=== GetSystemInfo ===\n' + result.content[0].text);
+    expectTextResult(result);
+    expect(result.content[0].text).toContain('RELEASE');
   });
 
   it('retrieves a structure', async () => {

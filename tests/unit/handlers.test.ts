@@ -16,6 +16,7 @@ import { handleGetPackage } from '../../src/handlers/handleGetPackage.js';
 import { handleGetProgram } from '../../src/handlers/handleGetProgram.js';
 import { handleGetServiceDefinition } from '../../src/handlers/handleGetServiceDefinition.js';
 import { handleGetStructure } from '../../src/handlers/handleGetStructure.js';
+import { handleGetSystemInfo } from '../../src/handlers/handleGetSystemInfo.js';
 import { handleGetTable } from '../../src/handlers/handleGetTable.js';
 import { handleGetTableContents } from '../../src/handlers/handleGetTableContents.js';
 import { handleGetTransaction } from '../../src/handlers/handleGetTransaction.js';
@@ -344,6 +345,20 @@ describe('ExecuteQuery', () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('Only one SELECT statement is allowed');
+  });
+});
+
+describe('GetSystemInfo', () => {
+  it('posts the fixed CVERS query, unaffected by allowFreeSql', async () => {
+    const { connection, calls } = fakeConnection(() => OK, { system: { allowFreeSql: false } });
+
+    const result = await handleGetSystemInfo(connection);
+
+    expect(result.isError).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/datapreview/freestyle');
+    expect(calls[0].body).toBe('SELECT COMPONENT, RELEASE, EXTRELEASE FROM CVERS ORDER BY COMPONENT');
   });
 });
 

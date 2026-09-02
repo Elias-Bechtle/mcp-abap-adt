@@ -18,6 +18,7 @@ import { handleGetPackage } from './handlers/handleGetPackage.js';
 import { handleGetProgram } from './handlers/handleGetProgram.js';
 import { handleGetServiceDefinition } from './handlers/handleGetServiceDefinition.js';
 import { handleGetStructure } from './handlers/handleGetStructure.js';
+import { handleGetSystemInfo } from './handlers/handleGetSystemInfo.js';
 import { handleGetTable } from './handlers/handleGetTable.js';
 import { handleGetTableContents } from './handlers/handleGetTableContents.js';
 import { handleGetTransaction } from './handlers/handleGetTransaction.js';
@@ -131,6 +132,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         ),
     },
     handleExecuteQuery,
+  ),
+  defineTool(
+    'GetSystemInfo',
+    'Retrieve the SAP system release and installed software component versions (from CVERS), ' +
+      'to check ABAP/SAP version compatibility before generating code.',
+    {},
+    handleGetSystemInfo,
   ),
   defineTool(
     'GetPackage',
