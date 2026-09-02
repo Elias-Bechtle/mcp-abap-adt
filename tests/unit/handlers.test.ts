@@ -20,6 +20,7 @@ import { handleGetTable } from '../../src/handlers/handleGetTable.js';
 import { handleGetTableContents } from '../../src/handlers/handleGetTableContents.js';
 import { handleGetTransaction } from '../../src/handlers/handleGetTransaction.js';
 import { handleGetTypeInfo } from '../../src/handlers/handleGetTypeInfo.js';
+import { handleGetWhereUsed } from '../../src/handlers/handleGetWhereUsed.js';
 import { handleSearchObject } from '../../src/handlers/handleSearchObject.js';
 
 const OK: FakeResponse = { body: '<source/>' };
@@ -346,6 +347,82 @@ describe('ExecuteQuery', () => {
   });
 });
 
+describe('GetWhereUsed', () => {
+  const twoReferences =
+    '<usageReferences:usageReferenceResult xmlns:usageReferences="http://www.sap.com/adt/ris/usageReferences" ' +
+    'xmlns:adtcore="http://www.sap.com/adt/core">' +
+    '<usageReferences:referencedObjects>' +
+    '<usageReferences:referencedObject uri="/sap/bc/adt/programs/programs/ZCALLER1" usageInformation="used">' +
+    '<usageReferences:adtObject adtcore:name="ZCALLER1" adtcore:type="PROG/P" adtcore:description="Caller one">' +
+    '<adtcore:packageRef adtcore:name="ZPKG1"/>' +
+    '</usageReferences:adtObject>' +
+    '</usageReferences:referencedObject>' +
+    '<usageReferences:referencedObject uri="/sap/bc/adt/programs/programs/ZCALLER2" usageInformation="used">' +
+    '<usageReferences:adtObject adtcore:name="ZCALLER2" adtcore:type="PROG/P">' +
+    '<adtcore:packageRef adtcore:name="ZPKG2"/>' +
+    '</usageReferences:adtObject>' +
+    '</usageReferences:referencedObject>' +
+    '</usageReferences:referencedObjects>' +
+    '</usageReferences:usageReferenceResult>';
+
+  it('posts the object uri and parses the referenced objects', async () => {
+    const { result, calls } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'class', object_name: 'ZCL_FOO' }),
+      () => ({ body: twoReferences }),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/repository/informationsystem/usageReferences');
+    expect(calls[0].url.searchParams.get('uri')).toBe('/sap/bc/adt/oo/classes/ZCL_FOO');
+    expect(textOf(result)).toBe(
+      [
+        'PROG/P ZCALLER1 (ZPKG1) [used]: /sap/bc/adt/programs/programs/ZCALLER1',
+        'PROG/P ZCALLER2 (ZPKG2) [used]: /sap/bc/adt/programs/programs/ZCALLER2',
+      ].join('\n'),
+    );
+  });
+
+  it('builds the object uri per type', async () => {
+    const cases: Array<[Parameters<typeof handleGetWhereUsed>[1], string]> = [
+      [{ object_type: 'program', object_name: 'ZFOO' }, '/sap/bc/adt/programs/programs/ZFOO'],
+      [{ object_type: 'interface', object_name: 'ZIF_FOO' }, '/sap/bc/adt/oo/interfaces/ZIF_FOO'],
+      [{ object_type: 'table', object_name: 'ZTAB' }, '/sap/bc/adt/ddic/tables/ZTAB'],
+      [{ object_type: 'cds_view', object_name: 'i_currency' }, '/sap/bc/adt/ddic/ddl/sources/I_CURRENCY'],
+    ];
+
+    const results = await Promise.all(
+      cases.map(([args]) =>
+        callHandler(
+          (c) => handleGetWhereUsed(c, args),
+          () => ({ body: twoReferences }),
+        ),
+      ),
+    );
+
+    results.forEach(({ calls }, index) => {
+      expect(calls[0].url.searchParams.get('uri')).toBe(cases[index][1]);
+    });
+  });
+
+  it('reports no usages without falling back to raw XML', async () => {
+    const empty =
+      '<usageReferences:usageReferenceResult xmlns:usageReferences="http://www.sap.com/adt/ris/usageReferences">' +
+      '<usageReferences:referencedObjects/>' +
+      '</usageReferences:usageReferenceResult>';
+
+    const { result } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZUNUSED' }),
+      () => ({ body: empty }),
+    );
+
+    expect(textOf(result)).toBe('No usages found.');
+  });
+
+  it('falls back to the raw XML for an unrecognised response shape', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZTAB' }),
 describe('GetPackage', () => {
   const nodeStructure = `<?xml version="1.0" encoding="utf-8"?>
 <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">

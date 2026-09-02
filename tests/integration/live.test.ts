@@ -17,6 +17,7 @@ import { handleGetTypeInfo } from '../../src/handlers/handleGetTypeInfo.js';
 import { handleGetInterface } from '../../src/handlers/handleGetInterface.js';
 import { handleGetTransaction } from '../../src/handlers/handleGetTransaction.js';
 import { handleSearchObject } from '../../src/handlers/handleSearchObject.js';
+import { handleGetWhereUsed } from '../../src/handlers/handleGetWhereUsed.js';
 import type { ToolResult } from '../../src/lib/result.js';
 
 /**
@@ -116,6 +117,16 @@ describe.skipIf(!runLive)('live ADT integration', () => {
   // Exercises the CSRF token and cookie round trip, which no GET-only test covers.
   it('retrieves table contents', async () => {
     expectTextResult(await handleGetTableContents(connection, { table_name: 'DD02L', max_rows: 5 }));
+  });
+
+  // IF_T100_MESSAGE is implemented across the system, so a real answer must
+  // be non-empty - the one thing a unit test against a fake response cannot
+  // check, and exactly the endpoint-shape assumption this test exists to pin down.
+  it('finds usages of a widely implemented standard interface', async () => {
+    const result = await handleGetWhereUsed(connection, { object_type: 'interface', object_name: 'IF_T100_MESSAGE' });
+    console.log('\n=== GetWhereUsed ===\n' + result.content[0].text);
+    expectTextResult(result);
+    expect(result.content[0].text).not.toBe('No usages found.');
   });
 
   // A field report claimed the freestyle endpoint rejects joins with "only one

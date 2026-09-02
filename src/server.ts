@@ -22,6 +22,7 @@ import { handleGetTable } from './handlers/handleGetTable.js';
 import { handleGetTableContents } from './handlers/handleGetTableContents.js';
 import { handleGetTransaction } from './handlers/handleGetTransaction.js';
 import { handleGetTypeInfo } from './handlers/handleGetTypeInfo.js';
+import { handleGetWhereUsed } from './handlers/handleGetWhereUsed.js';
 import { handleListSystems } from './handlers/handleListSystems.js';
 import { handleSearchObject } from './handlers/handleSearchObject.js';
 import { setLogSink } from './lib/log.js';
@@ -193,6 +194,16 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       service_definition_name: z.string().describe('Name of the RAP Service Definition (e.g. Z_MY_SERVICE)'),
     },
     handleGetServiceDefinition,
+  ),
+  defineTool(
+    'GetWhereUsed',
+    "Retrieve an ABAP object's where-used list (usage references) - the same list Eclipse ADT's " +
+      'Ctrl+Shift+H shows. Use before changing or removing an object to see what depends on it.',
+    {
+      object_type: z.enum(['program', 'class', 'interface', 'table', 'cds_view']).describe('Kind of the object'),
+      object_name: z.string().describe('Name of the ABAP object to find usages of'),
+    },
+    handleGetWhereUsed,
   ),
 ];
 
