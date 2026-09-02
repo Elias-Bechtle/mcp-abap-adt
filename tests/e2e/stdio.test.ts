@@ -48,6 +48,16 @@ async function startServer(args: string[] = []) {
       HOME: HERMETIC_HOME,
       USERPROFILE: HERMETIC_HOME,
       XDG_CONFIG_HOME: HERMETIC_HOME,
+      // index.ts's loadPackageEnvFile() reads a .env sitting next to the
+      // installed package, resolved from the script's own location rather
+      // than cwd - the redirects above don't reach it. process.loadEnvFile
+      // never overwrites an already-set variable, so pre-setting these empty
+      // blocks a developer's real .env (with real SAP credentials) from
+      // reaching this child process the way HOME redirection blocks .mcp-abap-adtrc.
+      SAP_URL: '',
+      SAP_USERNAME: '',
+      SAP_PASSWORD: '',
+      SAP_CLIENT: '',
     },
     stderr: 'pipe',
   });
