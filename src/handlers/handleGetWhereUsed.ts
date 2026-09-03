@@ -1,6 +1,7 @@
 import convert from 'xml-js';
 
 import type { SapConnection } from '../connection/SapConnection.js';
+import { uriFragmentFields } from '../lib/adtUri.js';
 import { asArray } from '../lib/dataPreview.js';
 import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
@@ -32,13 +33,30 @@ interface UsageReference {
   packageName: string;
 }
 
+interface UsageResult {
+  references: UsageReference[];
+  /** Grouping nodes dropped, reported so the filter stays auditable. */
+  omitted: number;
+}
+
 /**
  * Returns undefined only when the expected root is missing entirely - an
  * unfamiliar response shape, not a real "nothing uses this object" answer.
  * Mirrors compactDataPreview's fallback: an unrecognised variant should cost
  * the caller detail, not the whole answer.
+ *
+ * SAP answers with a tree flattened into one list, and only the leaves are
+ * usages: a package or function group appears as a grouping node for the hits
+ * beneath it. The two are told apart by `usageInformation`, which only a real
+ * usage carries - the type does not help, since a grouping node has one too
+ * (`FUGR/F`). Measured on T100: 697 of 1432 entries were grouping nodes, and
+ * a model reading the unfiltered list would count them as callers.
+ *
+ * `omitted` is carried out rather than discarded: were a system ever to leave
+ * the attribute off a real hit, a silent filter would hide it, and a number
+ * that suddenly matches the total is the visible symptom.
  */
-function parseUsageReferences(xml: string): UsageReference[] | undefined {
+function parseUsageReferences(xml: string): UsageResult | undefined {
   let parsed: any;
   try {
     parsed = convert.xml2js(xml, { compact: true });
@@ -50,29 +68,57 @@ function parseUsageReferences(xml: string): UsageReference[] | undefined {
   if (!result) return undefined;
 
   const nodes = asArray(result['usageReferences:referencedObjects']?.['usageReferences:referencedObject']);
-  return nodes.map((node: any) => {
+  const references: UsageReference[] = [];
+  let omitted = 0;
+
+  for (const node of nodes) {
+    const usageInformation = attr(node, 'usageInformation', 'usageReferences:usageInformation');
+    if (!usageInformation) {
+      omitted += 1;
+      continue;
+    }
+
     const adtObject = node?.['usageReferences:adtObject'];
     const packageRef = adtObject?.['adtcore:packageRef'];
-    return {
-      uri: attr(node, 'uri', 'usageReferences:uri', 'adtcore:uri'),
-      usageInformation: attr(node, 'usageInformation', 'usageReferences:usageInformation'),
-      type: attr(adtObject, 'adtcore:type'),
+    const uri = attr(node, 'uri', 'usageReferences:uri', 'adtcore:uri');
+    references.push({
+      uri,
+      usageInformation,
+      // A hit inside a method has no type on its adtObject; ADT puts it in the
+      // URI fragment instead (`#type=CLAS%2FOM;name=...`). Without this, every
+      // such usage reads as type "?".
+      type: attr(adtObject, 'adtcore:type') || uriFragmentFields(uri).type || '',
       name: attr(adtObject, 'adtcore:name'),
       description: attr(adtObject, 'adtcore:description'),
       packageName: attr(packageRef, 'adtcore:name'),
-    };
-  });
+    });
+  }
+
+  return { references, omitted };
 }
 
-function formatUsageReferences(references: UsageReference[]): string {
-  if (references.length === 0) return 'No usages found.';
-  return references
-    .map((r) => {
-      const location = r.packageName ? `${r.name} (${r.packageName})` : r.name;
-      const info = r.usageInformation ? ` [${r.usageInformation}]` : '';
-      return `${r.type || '?'} ${location}${info}: ${r.uri}`;
-    })
-    .join('\n');
+/**
+ * The header states the real total before the list is cut, so a truncated
+ * answer can never read as a shorter one - the same reason GetAtcFindings
+ * names its total. A widely used object is where this matters: T100 answers
+ * with 735 usages, which no model reads to the end and none should be told it
+ * has seen in full.
+ */
+function formatUsageReferences(result: UsageResult, limit: number): string {
+  const { references, omitted } = result;
+  const grouping = omitted > 0 ? ` ${omitted} grouping nodes were omitted.` : '';
+  if (references.length === 0) return `No usages found.${grouping}`;
+
+  const shown = references.slice(0, limit);
+  const counts = [`${references.length} usages`];
+  if (omitted > 0) counts.push(`${omitted} grouping nodes omitted`);
+  if (shown.length < references.length) counts.push(`showing the first ${shown.length}`);
+
+  const lines = shown.map((r) => {
+    const location = r.packageName ? `${r.name} (${r.packageName})` : r.name;
+    return `${r.type || '?'} ${location} [${r.usageInformation}]: ${r.uri}`;
+  });
+  return [`${counts.join(', ')}:`, ...lines].join('\n');
 }
 
 /**
@@ -82,7 +128,7 @@ function formatUsageReferences(references: UsageReference[]): string {
  */
 export async function handleGetWhereUsed(
   connection: SapConnection,
-  args: { object_type: UsageObjectType; object_name: string },
+  args: { object_type: UsageObjectType; object_name: string; max_results?: number },
 ): Promise<ToolResult> {
   try {
     const uri = OBJECT_URI[args.object_type](args.object_name);
@@ -98,8 +144,9 @@ export async function handleGetWhereUsed(
       headers: { 'Content-Type': 'application/*', Accept: 'application/*' },
     });
 
-    const references = parseUsageReferences(response.data);
-    return return_text(references ? formatUsageReferences(references) : response.data);
+    const result = parseUsageReferences(response.data);
+    if (!result) return return_text(response.data);
+    return return_text(formatUsageReferences(result, args.max_results ?? 100));
   } catch (error) {
     return return_error(error);
   }

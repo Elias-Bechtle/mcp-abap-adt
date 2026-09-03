@@ -43,6 +43,14 @@ const MAX_ROW_LIMIT = 5000;
  */
 const MAX_FINDING_LIMIT = 1000;
 
+/**
+ * Ceiling for where-used hits, for the same reason. A widely used standard
+ * object has hundreds: T100 answers with 735 usages once the grouping nodes
+ * are filtered out, which is a signal to ask a narrower question rather than
+ * something to page through.
+ */
+const MAX_USAGE_LIMIT = 1000;
+
 /** Mixed into every ADT tool so a call can pick which system to talk to. */
 const systemArgument = {
   system: z
@@ -231,6 +239,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     {
       object_type: z.enum(['program', 'class', 'interface', 'table', 'cds_view']).describe('Kind of the object'),
       object_name: z.string().describe('Name of the ABAP object to find usages of'),
+      max_results: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_USAGE_LIMIT)
+        .default(100)
+        .describe('Maximum number of usages to list. The real total is always reported, even when cut.'),
     },
     handleGetWhereUsed,
   ),

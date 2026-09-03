@@ -446,10 +446,88 @@ describe('GetWhereUsed', () => {
     expect(calls[0].url.searchParams.get('uri')).toBe('/sap/bc/adt/oo/classes/ZCL_FOO');
     expect(textOf(result)).toBe(
       [
+        '2 usages:',
         'PROG/P ZCALLER1 (ZPKG1) [used]: /sap/bc/adt/programs/programs/ZCALLER1',
         'PROG/P ZCALLER2 (ZPKG2) [used]: /sap/bc/adt/programs/programs/ZCALLER2',
       ].join('\n'),
     );
+  });
+
+  /**
+   * SAP flattens a tree into this list, and only the leaves are usages: a
+   * package or function group is a grouping node for the hits beneath it,
+   * recognisable by carrying no `usageInformation`. Measured on T100, 697 of
+   * 1432 entries were grouping nodes - which a model reading the unfiltered
+   * list counts as callers.
+   */
+  it('drops grouping nodes and says how many', async () => {
+    const withGroupingNode =
+      '<usageReferences:usageReferenceResult xmlns:usageReferences="http://www.sap.com/adt/ris/usageReferences" ' +
+      'xmlns:adtcore="http://www.sap.com/adt/core">' +
+      '<usageReferences:referencedObjects>' +
+      // No usageInformation: a grouping node, and note it does carry a type,
+      // so the type is not what tells the two apart.
+      '<usageReferences:referencedObject uri="/sap/bc/adt/functions/groups/ZFG">' +
+      '<usageReferences:adtObject adtcore:name="ZFG" adtcore:type="FUGR/F">' +
+      '<adtcore:packageRef adtcore:name="ZPKG"/>' +
+      '</usageReferences:adtObject>' +
+      '</usageReferences:referencedObject>' +
+      '<usageReferences:referencedObject uri="/sap/bc/adt/programs/programs/ZCALLER1" usageInformation="used">' +
+      '<usageReferences:adtObject adtcore:name="ZCALLER1" adtcore:type="PROG/P">' +
+      '<adtcore:packageRef adtcore:name="ZPKG1"/>' +
+      '</usageReferences:adtObject>' +
+      '</usageReferences:referencedObject>' +
+      '</usageReferences:referencedObjects>' +
+      '</usageReferences:usageReferenceResult>';
+
+    const { result } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZTAB' }),
+      () => ({ body: withGroupingNode }),
+    );
+
+    expect(textOf(result)).toBe(
+      [
+        '1 usages, 1 grouping nodes omitted:',
+        'PROG/P ZCALLER1 (ZPKG1) [used]: /sap/bc/adt/programs/programs/ZCALLER1',
+      ].join('\n'),
+    );
+    expect(textOf(result)).not.toContain('ZFG');
+  });
+
+  /** A hit inside a method carries its type in the URI fragment, not on adtObject. */
+  it('recovers the type of a method hit from the uri fragment', async () => {
+    const methodHit =
+      '<usageReferences:usageReferenceResult xmlns:usageReferences="http://www.sap.com/adt/ris/usageReferences" ' +
+      'xmlns:adtcore="http://www.sap.com/adt/core">' +
+      '<usageReferences:referencedObjects>' +
+      '<usageReferences:referencedObject ' +
+      'uri="/sap/bc/adt/oo/classes/zcl_foo/source/main#type=CLAS%2FOM;name=MEASURE_TIME;start=1" ' +
+      'usageInformation="gradeDirect">' +
+      '<usageReferences:adtObject adtcore:name="MEASURE_TIME">' +
+      '<adtcore:packageRef adtcore:name="ZPKG"/>' +
+      '</usageReferences:adtObject>' +
+      '</usageReferences:referencedObject>' +
+      '</usageReferences:referencedObjects>' +
+      '</usageReferences:usageReferenceResult>';
+
+    const { result } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZTAB' }),
+      () => ({ body: methodHit }),
+    );
+
+    expect(textOf(result)).toContain('CLAS/OM MEASURE_TIME (ZPKG) [gradeDirect]');
+    expect(textOf(result)).not.toContain('? MEASURE_TIME');
+  });
+
+  it('caps the list at max_results while still naming the real total', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetWhereUsed(c, { object_type: 'class', object_name: 'ZCL_FOO', max_results: 1 }),
+      () => ({ body: twoReferences }),
+    );
+
+    expect(textOf(result)).toContain('2 usages, showing the first 1:');
+    expect(textOf(result)).toContain('ZCALLER1');
+    expect(textOf(result)).not.toContain('ZCALLER2');
   });
 
   it('builds the object uri per type', async () => {
