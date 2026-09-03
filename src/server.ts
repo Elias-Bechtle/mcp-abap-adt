@@ -222,9 +222,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   ),
   defineTool(
     'CheckSyntax',
-    'Run a non-activating ABAP syntax check against a program, class, or interface. Checks the given ' +
-      "source text as if it replaced the object's current source - nothing is saved or activated. " +
-      'Useful to validate generated or edited code before it is applied through some other channel.',
+    'Run a non-activating ABAP syntax check on source text you supply. What is checked is `source`, ' +
+      'never what the system currently stores, and nothing is saved or activated. The named object only ' +
+      'lends context, and it does not have to exist: SAP checks the supplied text either way. So this ' +
+      'validates brand-new code just as well as an edit to an existing object - there is no need to find ' +
+      'a real target object first.',
     {
       object_type: z.enum(['program', 'class', 'interface']).describe('Kind of the ABAP object source belongs to'),
       object_name: z

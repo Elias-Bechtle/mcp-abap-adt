@@ -12,6 +12,12 @@ Turning `allowFreeSql` off deserves a clear-eyed look at what it achieves: `GetT
 
 Several read-only tools use POST, which is worth naming before it looks like an oversight. ADT expects a payload in the request body for some reads, so the method says nothing about the effect: `ExecuteQuery` and `GetTableContents` POST a SELECT, `GetWhereUsed` POSTs a fixed body and names its target in the query string, and `CheckSyntax` POSTs the source text to be checked — which is the point, since it checks text the caller supplies rather than what is stored, and nothing is saved or activated.
 
+## The one tool that sends code the other way
+
+Every other tool in this server pulls information out of SAP. `CheckSyntax` is the first that pushes something in: the caller hands it ABAP source text, which is base64-encoded into the request body and sent to `/sap/bc/adt/checkruns` to be parsed and checked.
+
+Nothing is written and nothing is executed. The check-run reporter compiles the text in memory and answers with messages; it has no path to the repository, no lock, no activation, and the named object is not read or touched — it only supplies syntax context, and it does not even have to exist. But the direction of travel is new, and it deserves saying out loud rather than being discovered in the code later: when a model uses this tool, model-generated text reaches the SAP system. On a system where that is unwelcome regardless of effect, the tool should not be offered.
+
 ## The one tool that leaves something behind
 
 `GetAtcFindings` is the exception to "reads change nothing", and it is more honest to describe it than to let the word read-only carry it.
