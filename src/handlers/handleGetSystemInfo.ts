@@ -16,7 +16,7 @@ export async function handleGetSystemInfo(connection: SapConnection): Promise<To
     const response = await connection.request('/sap/bc/adt/datapreview/freestyle', {
       method: 'POST',
       body: SYSTEM_INFO_QUERY,
-      query: { rowNumber: 100 },
+      query: { rowNumber: 500 },
       headers: { 'Content-Type': 'text/plain', Accept: 'application/xml, text/plain, */*' },
     });
     return return_text(compactDataPreview(response.data));
