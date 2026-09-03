@@ -40,6 +40,15 @@ async function runCli(args: string[]) {
         HOME: HERMETIC_HOME,
         USERPROFILE: HERMETIC_HOME,
         XDG_CONFIG_HOME: HERMETIC_HOME,
+        // Blanked for the reason stdio.test.ts sets out at length: the .env
+        // that index.ts loads sits beside the package, so neither the home
+        // redirect nor this temporary cwd keeps a developer's real SAP
+        // credentials out of the child - but a variable that is already set
+        // does, because loadEnvFile never overwrites one.
+        SAP_URL: '',
+        SAP_USERNAME: '',
+        SAP_PASSWORD: '',
+        SAP_CLIENT: '',
       },
       timeout: 30_000,
     });
