@@ -576,6 +576,32 @@ describe('GetWhereUsed', () => {
   });
 });
 
+/** What /atc/variants answers: the names matching the `name` query pattern. */
+const variantList = (names: string[]) =>
+  '<?xml version="1.0" encoding="utf-8"?>' +
+  '<nameditem:namedItemList xmlns:nameditem="http://www.sap.com/adt/nameditem">' +
+  `<nameditem:totalItemCount>${names.length}</nameditem:totalItemCount>` +
+  names
+    .map(
+      (name) =>
+        `<nameditem:namedItem><nameditem:name>${name}</nameditem:name>` +
+        '<nameditem:description/><nameditem:data/></nameditem:namedItem>',
+    )
+    .join('') +
+  '</nameditem:namedItemList>';
+
+/** Matches a name pattern the way SAP does for /atc/variants: exact, or a '*' suffix. */
+function matching(pattern: string, offered: string[]): string[] {
+  if (!pattern.endsWith('*')) return offered.filter((name) => name === pattern);
+  const prefix = pattern.slice(0, -1);
+  return offered.filter((name) => name.startsWith(prefix));
+}
+
+/** Indices shift as steps are added; the path is the stable handle. */
+function only(calls: RecordedCall[], path: string): RecordedCall[] {
+  return calls.filter((call) => call.url.pathname === path);
+}
+
 /**
  * Builders for the ATC fixtures. They sit out here because they capture
  * nothing from the suite below - and because the shape they assemble is the
@@ -658,10 +684,19 @@ describe('GetAtcFindings', () => {
       ),
   );
 
+  /** Stands in for the variants this system offers, matched the way SAP does. */
+  const OFFERED = ['ZVAR', 'ZSYSTEM_DEFAULT', 'ZREFERENCED', 'ZOTHER'];
+
   /** Routes by path, so a test does not depend on how many requests precede it. */
-  function atcResponder(worklistXml: string, runXml = runStats): (call: RecordedCall) => FakeResponse | Error {
+  function atcResponder(
+    worklistXml: string,
+    runXml = runStats,
+    offered = OFFERED,
+  ): (call: RecordedCall) => FakeResponse | Error {
     return (call) => {
       switch (call.url.pathname) {
+        case '/sap/bc/adt/atc/variants':
+          return { body: variantList(matching(call.url.searchParams.get('name') ?? '', offered)) };
         case '/sap/bc/adt/atc/customizing':
           return { body: customizing };
         case '/sap/bc/adt/atc/worklists':
@@ -676,29 +711,34 @@ describe('GetAtcFindings', () => {
     };
   }
 
-  it('walks the three steps in order, with the object uri in the run body', async () => {
+  it('walks the steps in order, with the object uri in the run body', async () => {
     const { result, calls } = await callHandler(
       (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
       atcResponder(atcWorklist(programObject)),
     );
 
     expect(result.isError).toBe(false);
-    // An explicit variant needs no customizing lookup, so exactly three calls.
-    expect(calls).toHaveLength(3);
+    // An explicit variant needs no customizing lookup: validate, create, run, read.
+    expect(calls.map((call) => call.url.pathname)).toEqual([
+      '/sap/bc/adt/atc/variants',
+      '/sap/bc/adt/atc/worklists',
+      '/sap/bc/adt/atc/runs',
+      '/sap/bc/adt/atc/worklists/WL1',
+    ]);
 
-    expect(calls[0].method).toBe('POST');
-    expect(calls[0].url.pathname).toBe('/sap/bc/adt/atc/worklists');
-    expect(calls[0].url.searchParams.get('checkVariant')).toBe('ZVAR');
+    const [created] = only(calls, '/sap/bc/adt/atc/worklists');
+    expect(created.method).toBe('POST');
+    expect(created.url.searchParams.get('checkVariant')).toBe('ZVAR');
 
-    expect(calls[1].method).toBe('POST');
-    expect(calls[1].url.pathname).toBe('/sap/bc/adt/atc/runs');
-    expect(calls[1].url.searchParams.get('worklistId')).toBe('WL1');
-    expect(calls[1].body).toContain('adtcore:uri="/sap/bc/adt/programs/programs/ZFOO"');
-    expect(calls[1].body).toContain('maximumVerdicts="100"');
+    const [run] = only(calls, '/sap/bc/adt/atc/runs');
+    expect(run.method).toBe('POST');
+    expect(run.url.searchParams.get('worklistId')).toBe('WL1');
+    expect(run.body).toContain('adtcore:uri="/sap/bc/adt/programs/programs/ZFOO"');
+    expect(run.body).toContain('maximumVerdicts="100"');
 
-    expect(calls[2].method).toBe('GET');
-    expect(calls[2].url.pathname).toBe('/sap/bc/adt/atc/worklists/WL1');
-    expect(calls[2].headers.accept).toBe('application/atc.worklist.v1+xml');
+    const [read] = only(calls, '/sap/bc/adt/atc/worklists/WL1');
+    expect(read.method).toBe('GET');
+    expect(read.headers.accept).toBe('application/atc.worklist.v1+xml');
   });
 
   it('resolves the system check variant when none is given', async () => {
@@ -707,11 +747,33 @@ describe('GetAtcFindings', () => {
       atcResponder(atcWorklist(programObject)),
     );
 
-    expect(calls).toHaveLength(4);
-    expect(calls[0].method).toBe('GET');
-    expect(calls[0].url.pathname).toBe('/sap/bc/adt/atc/customizing');
-    expect(calls[1].url.searchParams.get('checkVariant')).toBe('ZSYSTEM_DEFAULT');
+    expect(only(calls, '/sap/bc/adt/atc/customizing')).toHaveLength(1);
+    expect(only(calls, '/sap/bc/adt/atc/worklists')[0].url.searchParams.get('checkVariant')).toBe('ZSYSTEM_DEFAULT');
     expect(textOf(result)).toContain('Check variant: ZSYSTEM_DEFAULT (system default)');
+  });
+
+  /**
+   * The defect this guards against: SAP answers a request for a variant it does
+   * not offer by silently running its own default, so the findings come back
+   * looking like the variant that was asked for. Measured against a live
+   * system - an invented name and a name that exists but is not released for
+   * general use both produced the default's eight findings on the same class.
+   */
+  it('refuses a variant the system does not offer, and names the near misses', async () => {
+    const { result, calls } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'class', object_name: 'ZCL_FOO', check_variant: 'ZVARIANT_X' }),
+      atcResponder(atcWorklist(classObject)),
+    );
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('"ZVARIANT_X" is not a check variant this system offers');
+    expect(textOf(result)).toContain('silently running its own default');
+    // The prefix search offers what the system really has under "ZVAR".
+    expect(textOf(result)).toContain('ZVAR');
+
+    // Nothing was created: the check runs before the worklist exists.
+    expect(only(calls, '/sap/bc/adt/atc/worklists')).toHaveLength(0);
+    expect(only(calls, '/sap/bc/adt/atc/runs')).toHaveLength(0);
   });
 
   it('recovers the line from a report location', async () => {
@@ -787,13 +849,31 @@ describe('GetAtcFindings', () => {
       (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO' }),
       atcResponder(atcWorklist(''), runAborted),
     );
-    expect(textOf(fromDefault)).toContain('references ZREFERENCED; pass that as check_variant');
+    expect(textOf(fromDefault)).toContain('references ZREFERENCED, which this system does offer');
 
     const { result: fromExplicit } = await callHandler(
       (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
       atcResponder(atcWorklist(''), runAborted),
     );
-    expect(textOf(fromExplicit)).not.toContain('pass that as check_variant');
+    expect(textOf(fromExplicit)).not.toContain('HINT:');
+  });
+
+  /**
+   * The ATC customizing names a referenced variant without regard to whether
+   * it can be used: on the system this was built against it points at one ADT
+   * itself refuses. Suggesting it unchecked sent the caller somewhere they
+   * could not follow.
+   */
+  it('falls back to a generic hint when the referenced variant is not offered either', async () => {
+    const withoutReferenced = ['ZSYSTEM_DEFAULT', 'ZOTHER'];
+
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO' }),
+      atcResponder(atcWorklist(''), runAborted, withoutReferenced),
+    );
+
+    expect(textOf(result)).toContain('Pass check_variant with another variant this system offers.');
+    expect(textOf(result)).not.toContain('ZREFERENCED');
   });
 
   /** SAP ignored maximumVerdicts on the tested release, so the cap is applied here too. */
@@ -834,7 +914,8 @@ describe('GetAtcFindings', () => {
     );
 
     results.forEach(({ calls }, index) => {
-      expect(calls[1].body).toContain(`adtcore:uri="${cases[index][1]}"`);
+      const [run] = only(calls, '/sap/bc/adt/atc/runs');
+      expect(run.body).toContain(`adtcore:uri="${cases[index][1]}"`);
     });
   });
 

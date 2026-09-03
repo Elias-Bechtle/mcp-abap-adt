@@ -275,9 +275,10 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         .optional()
         .describe(
           'Name of the ATC check variant to run. Defaults to the variant configured for the system ' +
-            '(systemCheckVariant in the ATC customizing), which is what ADT itself uses. Note that SAP ' +
-            'accepts an unknown variant name silently and then reports no findings, so a typo looks like ' +
-            'a clean result; the variant actually used is named in the answer.',
+            '(systemCheckVariant in the ATC customizing), which is what ADT itself uses. A variant this ' +
+            'system does not offer is rejected with the names it does offer, rather than run: SAP would ' +
+            'answer such a request by silently substituting its own default, and the findings would read ' +
+            'as if they came from the variant that was asked for.',
         ),
       max_findings: z
         .number()

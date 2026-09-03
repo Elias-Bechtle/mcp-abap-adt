@@ -131,15 +131,65 @@ function parseRunInfos(xml: string): { stats: string; failures: string[] } {
   return { stats, failures };
 }
 
+/** The variants this system offers under `pattern`, which may contain `*`. */
+async function listAtcVariants(connection: SapConnection, pattern: string): Promise<string[]> {
+  const response = await connection.request('/sap/bc/adt/atc/variants', {
+    method: 'GET',
+    query: { name: pattern },
+    headers: { Accept: 'application/vnd.sap.adt.nameditems.v1+xml' },
+  });
+  return asArray(parseXml(response.data)?.['nameditem:namedItemList']?.['nameditem:namedItem'])
+    .map((item: any) => textOf(item?.['nameditem:name']))
+    .filter(Boolean);
+}
+
+function offers(variants: string[], variant: string): boolean {
+  return variants.some((name) => name.toUpperCase() === variant.toUpperCase());
+}
+
+/**
+ * SAP does not reject an unusable check variant. It silently substitutes its
+ * own default and answers with that variant's findings, and nothing in the
+ * response says which variant actually ran. Measured against a live system:
+ * an invented name, a name that exists but is not released for general use,
+ * and sending no name at all produced the identical eight findings on the same
+ * class - while three genuinely offered variants produced 9, 8 and 0.
+ *
+ * Without this check the answer would name a variant that never executed,
+ * which is the one failure this tool exists to prevent. ADT's own client
+ * refuses the same names, and this is the list it goes by.
+ *
+ * Checked before the worklist is created, so an unusable variant also leaves
+ * nothing behind on the server.
+ */
+async function assertVariantIsOffered(connection: SapConnection, variant: string): Promise<void> {
+  if (offers(await listAtcVariants(connection, variant), variant)) return;
+
+  // A prefix search turns the error into a "did you mean": a wrong variant is
+  // usually a near miss of one the system really has.
+  const nearby = await listAtcVariants(connection, `${variant.slice(0, 4)}*`);
+  const help =
+    nearby.length > 0
+      ? ` Variants on this system starting with "${variant.slice(0, 4)}": ${nearby.slice(0, 10).join(', ')}.`
+      : '';
+
+  throw new Error(
+    `"${variant}" is not a check variant this system offers - it may not exist, be inactive, or not be ` +
+      'released for general use. SAP would answer such a request by silently running its own default ' +
+      `instead, and the findings would read as if they came from "${variant}".${help}`,
+  );
+}
+
 /**
  * What ADT itself uses for "Run ABAP Test Cockpit": the variant configured for
  * this system. There is no universal default - the property is customer
  * specific - so this is read rather than guessed, and reading it is a plain GET.
  *
- * `referencedVariant` comes along because it is the one useful thing to suggest
- * when the system variant turns out not to run: on a system configured for
- * remote checks the default is the remote variant, and the variant it
- * references is the local one behind it.
+ * `referencedVariant` comes along as the one useful thing to suggest when the
+ * system variant turns out not to run: on a system configured for remote checks
+ * the default is the remote variant, and this names the one behind it. It is
+ * only a name, though - the customizing does not promise it can be used, so it
+ * goes through assertVariantIsOffered's list like any other.
  */
 async function readAtcCustomizing(
   connection: SapConnection,
@@ -207,10 +257,20 @@ function formatResult(result: AtcResult): string {
   // from a "no findings" answer, and it is the case where naming a candidate
   // actually helps - rather than silently switching variants, which would make
   // two identical calls answer differently depending on the system's mood.
-  if (result.failures.length > 0 && result.variantIsSystemDefault && result.referencedVariant) {
+  //
+  // `referencedVariant` is only filled in once it has been confirmed to be a
+  // variant this system offers. The customizing happily names one that is not:
+  // on the system this was built against it references a variant ADT itself
+  // refuses, so suggesting it unchecked sent the caller somewhere they could
+  // not follow.
+  if (result.failures.length > 0 && result.variantIsSystemDefault) {
     lines.push(
-      `HINT: ${result.variant} is this system's default and it did not run to completion. Its ATC ` +
-        `customizing references ${result.referencedVariant}; pass that as check_variant to try it instead.`,
+      result.referencedVariant
+        ? `HINT: ${result.variant} is this system's default and it did not run to completion. Its ATC ` +
+            `customizing references ${result.referencedVariant}, which this system does offer; pass that ` +
+            'as check_variant to try it instead.'
+        : `HINT: ${result.variant} is this system's default and it did not run to completion. Pass ` +
+            'check_variant with another variant this system offers.',
     );
   }
 
@@ -282,6 +342,8 @@ export async function handleGetAtcFindings(
       );
     }
 
+    await assertVariantIsOffered(connection, variant);
+
     const uri = OBJECT_URI[args.object_type](args.object_name);
     const timeoutMs = Math.max(connection.config.timeoutMs, ATC_TIMEOUT_FLOOR_MS);
     const maxFindings = args.max_findings ?? 100;
@@ -323,6 +385,14 @@ export async function handleGetAtcFindings(
     });
     const { stats, failures } = parseRunInfos(run.data);
 
+    // Only worth a request when there is actually a failure to help with, and
+    // only for the default path - a caller who named a variant chose it.
+    const referenced = customizing?.referencedVariant ?? '';
+    const usableReferenced =
+      failures.length > 0 && referenced && offers(await listAtcVariants(connection, referenced), referenced)
+        ? referenced
+        : '';
+
     // Step 3: read what the run produced. The worklist answers from its
     // "Last Check Run" object set by default, which is exactly this run.
     const findings = await connection.request(`/sap/bc/adt/atc/worklists/${encodeURIComponent(worklistId)}`, {
@@ -339,7 +409,7 @@ export async function handleGetAtcFindings(
         objects,
         variant,
         variantIsSystemDefault: !requested,
-        referencedVariant: customizing?.referencedVariant ?? '',
+        referencedVariant: usableReferenced,
         stats,
         failures,
         objectType: args.object_type,
