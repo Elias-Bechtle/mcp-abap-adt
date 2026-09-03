@@ -227,7 +227,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       'Useful to validate generated or edited code before it is applied through some other channel.',
     {
       object_type: z.enum(['program', 'class', 'interface']).describe('Kind of the ABAP object source belongs to'),
-      object_name: z.string().describe('Name of the existing ABAP object to check the source against'),
+      object_name: z
+        .string()
+        .describe(
+          'Name to check the source as. It need not exist - an existing object lends its context (its ' +
+            'type, includes and class hierarchy), an invented name still gets the text checked. Nothing ' +
+            'is written to it either way.',
+        ),
       source: z.string().describe('The ABAP source text to check (may differ from what is currently active)'),
     },
     handleCheckSyntax,
