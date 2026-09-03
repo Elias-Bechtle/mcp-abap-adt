@@ -23,6 +23,7 @@ import { handleGetTransaction } from '../../src/handlers/handleGetTransaction.js
 import { handleSearchObject } from '../../src/handlers/handleSearchObject.js';
 import { handleCheckSyntax } from '../../src/handlers/handleCheckSyntax.js';
 import { handleGetWhereUsed } from '../../src/handlers/handleGetWhereUsed.js';
+import { handleGetAtcFindings, type AtcObjectType } from '../../src/handlers/handleGetAtcFindings.js';
 import type { ToolResult } from '../../src/lib/result.js';
 
 /**
@@ -35,6 +36,29 @@ import type { ToolResult } from '../../src/lib/result.js';
  * Set INTEGRATION_SYSTEM to target a specific configured system.
  */
 const runLive = process.env.RUN_INTEGRATION === '1';
+
+/**
+ * ATC findings depend entirely on which check variant a system has configured
+ * and on whether the object falls inside that variant's scope - SAP standard
+ * code usually does not. An object that reliably produces findings is
+ * therefore a property of one specific system, and naming one here would both
+ * publish a system's internal object names and fail everywhere else. So it
+ * comes from the environment: with ATC_OBJECT set, the suite insists on real
+ * findings; without it, it checks only what holds on any system.
+ *
+ * The .env is read explicitly because these are not SAP_* variables that
+ * loadAppConfig would pick up on its way past - and a gitignored .env is the
+ * one place where a system's own object names can sit without travelling.
+ */
+try {
+  process.loadEnvFile();
+} catch {
+  // No .env beside the project: the ambient environment is all there is.
+}
+
+const atcObject = process.env.ATC_OBJECT?.trim();
+const atcVariant = process.env.ATC_VARIANT?.trim() || undefined;
+const atcObjectType = (process.env.ATC_OBJECT_TYPE?.trim() || 'class') as AtcObjectType;
 
 let registry: ConnectionRegistry;
 let connection: SapConnection;
@@ -176,6 +200,43 @@ describe.skipIf(!runLive)('live ADT integration', { timeout: 120_000 }, () => {
     expect(result.content[0].text).not.toBe('No usages found.');
   });
 
+  /**
+   * The one tool here that needs three requests rather than one, and the only
+   * one that leaves anything behind: the worklist SAP creates in step one.
+   * Both tests below run the whole chain, so a wrong path or a changed
+   * response shape in any of the three shows up immediately.
+   */
+  describe('GetAtcFindings', { timeout: 300_000 }, () => {
+    // Runs anywhere. RSABAPPROGRAM is SAP standard code and so most likely out
+    // of scope for whatever variant a system has configured - which makes
+    // "not checked" a perfectly good outcome. What is being pinned down is
+    // that the customizing lookup, the worklist, the run and the read all work
+    // and that the answer says which variant produced it.
+    it('completes the worklist round trip and names the variant it used', async () => {
+      const result = await handleGetAtcFindings(connection, {
+        object_type: 'program',
+        object_name: 'RSABAPPROGRAM',
+      });
+      console.log('\n=== GetAtcFindings (system default variant) ===\n' + result.content[0].text);
+      expectTextResult(result);
+      expect(result.content[0].text).toContain('Check variant:');
+    });
+
+    // The half a fake response cannot check: that real findings parse, and
+    // that priority, line and message survive the trip.
+    it.skipIf(!atcObject)(`reports findings for ${atcObject ?? 'ATC_OBJECT'}`, async () => {
+      const result = await handleGetAtcFindings(connection, {
+        object_type: atcObjectType,
+        object_name: atcObject as string,
+        check_variant: atcVariant,
+      });
+      console.log('\n=== GetAtcFindings (ATC_OBJECT) ===\n' + result.content[0].text);
+      expectTextResult(result);
+      expect(result.content[0].text).not.toContain('was not checked at all');
+      expect(result.content[0].text).toMatch(/\[prio \d\]/u);
+    });
+  });
+
   // A field report claimed the freestyle endpoint rejects joins with "only one
   // SELECT statement is allowed". Reproduction against a current release shows
   // joins with tilde notation work; the report's system presumably differs.
@@ -199,8 +260,8 @@ describe.skipIf(!runLive)('live ADT integration', { timeout: 120_000 }, () => {
    * stdio, which is the only difference from how Claude Desktop or Claude Code
    * would actually connect; the protocol on top of it is identical.
    */
-  describe('the three new tools over the real MCP protocol', () => {
-    it('answers GetSystemInfo, CheckSyntax and GetWhereUsed through a real MCP client', async () => {
+  describe('the four new tools over the real MCP protocol', { timeout: 300_000 }, () => {
+    it('answers all four through a real MCP client', async () => {
       const client = new Client({ name: 'manual-verification', version: '1.0.0' });
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       await Promise.all([client.connect(clientTransport), createServer(registry).connect(serverTransport)]);
@@ -231,6 +292,17 @@ describe.skipIf(!runLive)('live ADT integration', { timeout: 120_000 }, () => {
       console.log('\n=== GetWhereUsed (via MCP protocol) ===\n' + whereUsed.content[0].text);
       expect(whereUsed.isError).toBe(false);
       expect(whereUsed.content[0].text).not.toBe('No usages found.');
+
+      // Sent without check_variant on purpose: that path exercises the
+      // customizing lookup as well, and it is how a model would call the tool
+      // knowing nothing about the system's ATC configuration.
+      const atcFindings = (await client.callTool({
+        name: 'GetAtcFindings',
+        arguments: { object_type: 'program', object_name: 'RSABAPPROGRAM' },
+      })) as ContentText;
+      console.log('\n=== GetAtcFindings (via MCP protocol) ===\n' + atcFindings.content[0].text);
+      expect(atcFindings.isError).toBe(false);
+      expect(atcFindings.content[0].text).toContain('Check variant:');
 
       await client.close();
     });

@@ -11,6 +11,19 @@ Turning `allowFreeSql` off deserves a clear-eyed look at what it achieves: `GetT
 `store-credentials`, `doctor` and `setup` are CLI subcommands, not MCP tools: a model cannot invoke them.
 
 Several read-only tools use POST, which is worth naming before it looks like an oversight. ADT expects a payload in the request body for some reads, so the method says nothing about the effect: `ExecuteQuery` and `GetTableContents` POST a SELECT, `GetWhereUsed` POSTs a fixed body and names its target in the query string, and `CheckSyntax` POSTs the source text to be checked — which is the point, since it checks text the caller supplies rather than what is stored, and nothing is saved or activated.
+
+## The one tool that leaves something behind
+
+`GetAtcFindings` is the exception to "reads change nothing", and it is more honest to describe it than to let the word read-only carry it.
+
+ADT offers no way to run an ATC check with a GET. Starting one takes three requests, and the first of them — `POST /sap/bc/adt/atc/worklists` — creates an ATC worklist: a result container with an id of its own, owned by the calling user, which the following two requests fill and then read. It is not an ABAP repository object. Nothing is locked, activated, or written to a transport, no Customizing entry and no business data is touched, and SAP's own ATC housekeeping reclaims the container.
+
+What makes this defensible is not that argument, though, but SAP's own classification. The resource handler `CL_SATC_ADT_RES_WORKLIST` runs the *identical* authority check for `POST` as it does for `GET` — `display_result( )` in both methods — and that check resolves to `S_DEVELOP` activity 03 (Display) or, failing that, `S_Q_ADM` activity 16 (Execute). Neither 01 (Create) nor 02 (Change) appears anywhere on that path, while the genuinely mutating ATC operations in the same access-control class do demand them: changing a result, deleting one, approving an exemption. By SAP's own authorization model, creating a worklist is a display operation.
+
+One worklist per call, deliberately. MCP clients may run tool calls in parallel, and a shared container would let one call's run overwrite the "Last Check Run" object set another call is about to read.
+
+So the guarantee this server makes is precise rather than absolute: no ABAP repository object, Customizing entry or business data is ever modified, and nothing is transportable. A caller who wants even that container not to exist should not offer the tool.
+
 ## Why `importFioriSystems` is off by default
 
 Turning it on gives a model read access to every system you have saved in SAP Fiori tools, production among them — that is a decision to make, not to inherit. To keep the option findable anyway, a server with nothing configured names the systems it could have adopted:

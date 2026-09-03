@@ -8,6 +8,7 @@ import { SERVER_NAME, SERVER_VERSION } from './version.js';
 
 import { handleCheckSyntax } from './handlers/handleCheckSyntax.js';
 import { handleExecuteQuery } from './handlers/handleExecuteQuery.js';
+import { handleGetAtcFindings } from './handlers/handleGetAtcFindings.js';
 import { handleGetBehaviorDefinition } from './handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from './handlers/handleGetCDSView.js';
 import { handleGetClass } from './handlers/handleGetClass.js';
@@ -34,6 +35,13 @@ import { setLogSink } from './lib/log.js';
  * would hurt the SAP system long before the answer became useful.
  */
 const MAX_ROW_LIMIT = 5000;
+
+/**
+ * Ceiling for ATC findings. Unlike rows, findings are read by a model rather
+ * than aggregated, and a variant firing thousands of times on one object says
+ * "this object needs a different conversation", not "return everything".
+ */
+const MAX_FINDING_LIMIT = 1000;
 
 /** Mixed into every ADT tool so a call can pick which system to talk to. */
 const systemArgument = {
@@ -225,6 +233,38 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       object_name: z.string().describe('Name of the ABAP object to find usages of'),
     },
     handleGetWhereUsed,
+  ),
+  defineTool(
+    'GetAtcFindings',
+    'Retrieve ABAP Test Cockpit (ATC) findings for one repository object - the quality rules a system ' +
+      'actually enforces, which a syntax check does not reveal. Use it to see whether generated or ' +
+      'proposed code violates the active check variant; findings carry a priority where 1 is the most ' +
+      'severe. Note what this does on the server, since ADT offers no read-only way to run a check: the ' +
+      'call creates a transient ATC worklist, a result container owned by the calling user. No repository ' +
+      'object, Customizing entry or business data is changed, and nothing is locked, activated or transported.',
+    {
+      object_type: z
+        .enum(['program', 'class', 'interface', 'function_group', 'table', 'cds_view'])
+        .describe('Kind of the object to check'),
+      object_name: z.string().describe('Name of the ABAP object to retrieve ATC findings for'),
+      check_variant: z
+        .string()
+        .optional()
+        .describe(
+          'Name of the ATC check variant to run. Defaults to the variant configured for the system ' +
+            '(systemCheckVariant in the ATC customizing), which is what ADT itself uses. Note that SAP ' +
+            'accepts an unknown variant name silently and then reports no findings, so a typo looks like ' +
+            'a clean result; the variant actually used is named in the answer.',
+        ),
+      max_findings: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_FINDING_LIMIT)
+        .default(100)
+        .describe('Maximum number of findings ATC should report (maximumVerdicts)'),
+    },
+    handleGetAtcFindings,
   ),
 ];
 

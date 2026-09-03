@@ -6,6 +6,7 @@ import { fakeConnection, type FakeResponse, type RecordedCall } from '../helpers
 
 import { handleCheckSyntax } from '../../src/handlers/handleCheckSyntax.js';
 import { handleExecuteQuery } from '../../src/handlers/handleExecuteQuery.js';
+import { handleGetAtcFindings } from '../../src/handlers/handleGetAtcFindings.js';
 import { handleGetBehaviorDefinition } from '../../src/handlers/handleGetBehaviorDefinition.js';
 import { handleGetCDSView } from '../../src/handlers/handleGetCDSView.js';
 import { handleGetClass } from '../../src/handlers/handleGetClass.js';
@@ -491,6 +492,294 @@ describe('GetWhereUsed', () => {
     const { result } = await callHandler(
       (c) => handleGetWhereUsed(c, { object_type: 'table', object_name: 'ZTAB' }),
       () => ({ body: '<somethingElse/>' }),
+    );
+
+    expect(textOf(result)).toBe('<somethingElse/>');
+  });
+});
+
+/**
+ * Builders for the ATC fixtures. They sit out here because they capture
+ * nothing from the suite below - and because the shape they assemble is the
+ * point: the response nests three namespaces, its objects are
+ * `atcobject:object` rather than `atcworklist:object`, and a finding's
+ * location arrives in two different formats. Every fixture mirrors what a real
+ * S/4HANA system answered, with the object and variant names replaced by the
+ * placeholders this file uses elsewhere.
+ */
+const atcInfo = (type: string, description: string) =>
+  '<atcinfo:info xmlns:atcinfo="http://www.sap.com/adt/atc/info">' +
+  `<atcinfo:type>${type}</atcinfo:type><atcinfo:description>${description}</atcinfo:description>` +
+  '</atcinfo:info>';
+
+const atcRun = (infos: string) =>
+  '<?xml version="1.0" encoding="utf-8"?>' +
+  '<atcworklist:worklistRun xmlns:atcworklist="http://www.sap.com/adt/atc/worklist">' +
+  '<atcworklist:worklistId>WL1</atcworklist:worklistId>' +
+  `<atcworklist:infos>${infos}</atcworklist:infos>` +
+  '</atcworklist:worklistRun>';
+
+const atcWorklist = (objects: string) =>
+  '<?xml version="1.0" encoding="utf-8"?>' +
+  '<atcworklist:worklist atcworklist:id="WL1" atcworklist:timestamp="2026-09-01T14:46:46Z" ' +
+  'atcworklist:usedObjectSet="99999999999999999999999999999999" atcworklist:objectSetIsComplete="true" ' +
+  'xmlns:atcworklist="http://www.sap.com/adt/atc/worklist">' +
+  '<atcworklist:objectSets><atcworklist:objectSet atcworklist:name="9" atcworklist:title="Last Check Run" ' +
+  'atcworklist:kind="LAST_RUN"/></atcworklist:objectSets>' +
+  `<atcworklist:objects>${objects}</atcworklist:objects><atcworklist:infos/></atcworklist:worklist>`;
+
+const atcObjectXml = (attributes: string, findings: string) =>
+  `<atcobject:object ${attributes} xmlns:atcobject="http://www.sap.com/adt/atc/object" ` +
+  `xmlns:adtcore="http://www.sap.com/adt/core"><atcobject:findings>${findings}</atcobject:findings>` +
+  '</atcobject:object>';
+
+const atcFindingXml = (attributes: string) =>
+  `<atcfinding:finding ${attributes} xmlns:atcfinding="http://www.sap.com/adt/atc/finding"/>`;
+
+describe('GetAtcFindings', () => {
+  const customizing =
+    '<?xml version="1.0" encoding="utf-8"?>' +
+    '<atc:customizing xmlns:atc="http://www.sap.com/adt/atc"><properties>' +
+    '<property name="ciCheckFlavour" value="true"/>' +
+    '<property name="systemCheckVariant" value="ZSYSTEM_DEFAULT"/>' +
+    '<property name="referencedVariant" value="ZREFERENCED"/>' +
+    '</properties></atc:customizing>';
+
+  const runStats = atcRun(atcInfo('FINDING_STATS', '0,1,0'));
+  const runAborted = atcRun(
+    atcInfo('TOOL_FAILURE', 'Execution of check seemingly aborted') + atcInfo('FINDING_STATS', '0,0,0'),
+  );
+
+  /** A report finding: the location carries "start=line,column". */
+  const programObject = atcObjectXml(
+    'adtcore:type="PROG" adtcore:name="ZFOO" adtcore:packageName="ZPKG"',
+    atcFindingXml(
+      'atcfinding:location="/sap/bc/adt/programs/programs/zfoo/source/main#start=8,0" ' +
+        'atcfinding:priority="2" atcfinding:checkTitle="Analysis of WHERE Condition for SELECT" ' +
+        'atcfinding:messageId="0001" atcfinding:messageTitle="Table ZTAB: No WHERE condition" ' +
+        'atcfinding:exemptionKind=""',
+    ),
+  );
+
+  /** A class finding: no column, and the method is named in the fragment. */
+  const classObject = atcObjectXml(
+    'adtcore:type="CLAS" adtcore:name="ZCL_FOO" adtcore:packageName="ZPKG"',
+    atcFindingXml(
+      'atcfinding:location="/sap/bc/adt/oo/classes/zcl_foo/source/main' +
+        '#type=CLAS%2FOM;name=IF_OO_ADT_CLASSRUN%7eMAIN;start=32" ' +
+        'atcfinding:priority="3" atcfinding:checkTitle="Extended Program Check (SLIN)" ' +
+        'atcfinding:messageId="1700" atcfinding:messageTitle="Strings are not translated" ' +
+        'atcfinding:exemptionKind=""',
+    ) +
+      atcFindingXml(
+        'atcfinding:location="/sap/bc/adt/oo/classes/zcl_foo/source/main' +
+          '#type=CLAS%2FOM;name=IF_OO_ADT_CLASSRUN%7eMAIN;start=48" ' +
+          'atcfinding:priority="3" atcfinding:checkTitle="Extended Program Check (SLIN)" ' +
+          'atcfinding:messageId="1713" atcfinding:messageTitle="Another one" ' +
+          'atcfinding:exemptionKind="FPOS"',
+      ),
+  );
+
+  /** Routes by path, so a test does not depend on how many requests precede it. */
+  function atcResponder(worklistXml: string, runXml = runStats): (call: RecordedCall) => FakeResponse | Error {
+    return (call) => {
+      switch (call.url.pathname) {
+        case '/sap/bc/adt/atc/customizing':
+          return { body: customizing };
+        case '/sap/bc/adt/atc/worklists':
+          return { body: 'WL1' };
+        case '/sap/bc/adt/atc/runs':
+          return { body: runXml };
+        case '/sap/bc/adt/atc/worklists/WL1':
+          return { body: worklistXml };
+        default:
+          return new Error(`unexpected path ${call.url.pathname}`);
+      }
+    };
+  }
+
+  it('walks the three steps in order, with the object uri in the run body', async () => {
+    const { result, calls } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(programObject)),
+    );
+
+    expect(result.isError).toBe(false);
+    // An explicit variant needs no customizing lookup, so exactly three calls.
+    expect(calls).toHaveLength(3);
+
+    expect(calls[0].method).toBe('POST');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/atc/worklists');
+    expect(calls[0].url.searchParams.get('checkVariant')).toBe('ZVAR');
+
+    expect(calls[1].method).toBe('POST');
+    expect(calls[1].url.pathname).toBe('/sap/bc/adt/atc/runs');
+    expect(calls[1].url.searchParams.get('worklistId')).toBe('WL1');
+    expect(calls[1].body).toContain('adtcore:uri="/sap/bc/adt/programs/programs/ZFOO"');
+    expect(calls[1].body).toContain('maximumVerdicts="100"');
+
+    expect(calls[2].method).toBe('GET');
+    expect(calls[2].url.pathname).toBe('/sap/bc/adt/atc/worklists/WL1');
+    expect(calls[2].headers.accept).toBe('application/atc.worklist.v1+xml');
+  });
+
+  it('resolves the system check variant when none is given', async () => {
+    const { result, calls } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO' }),
+      atcResponder(atcWorklist(programObject)),
+    );
+
+    expect(calls).toHaveLength(4);
+    expect(calls[0].method).toBe('GET');
+    expect(calls[0].url.pathname).toBe('/sap/bc/adt/atc/customizing');
+    expect(calls[1].url.searchParams.get('checkVariant')).toBe('ZSYSTEM_DEFAULT');
+    expect(textOf(result)).toContain('Check variant: ZSYSTEM_DEFAULT (system default)');
+  });
+
+  it('recovers the line from a report location', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(programObject)),
+    );
+
+    expect(textOf(result)).toContain('PROG ZFOO (ZPKG), 1 findings:');
+    expect(textOf(result)).toContain(
+      '[prio 2] line 8 - Analysis of WHERE Condition for SELECT [0001]: Table ZTAB: No WHERE condition',
+    );
+    expect(textOf(result)).toContain('Findings by priority (1/2/3), as counted by ATC: 0/1/0');
+  });
+
+  it('recovers line and method from a class location, and marks an exemption', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'class', object_name: 'ZCL_FOO', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(classObject)),
+    );
+
+    expect(textOf(result)).toContain(
+      '[prio 3] line 32 in IF_OO_ADT_CLASSRUN~MAIN - Extended Program Check (SLIN) [1700]: ' +
+        'Strings are not translated',
+    );
+    expect(textOf(result)).toContain('[1713]: Another one (exempted: FPOS)');
+  });
+
+  /**
+   * The distinction this tool exists to keep: SAP answers 200 with an empty
+   * object list both for a name that does not exist and for an object outside
+   * the variant's scope. Calling that "no findings" would tell a model that
+   * unchecked code is clean.
+   */
+  it('says the object was not checked rather than reporting no findings', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZNOPE', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist('')),
+    );
+
+    expect(result.isError).toBe(false);
+    expect(textOf(result)).toContain('was not checked at all');
+    expect(textOf(result)).toContain('not the same as "no findings"');
+  });
+
+  it('reports no findings for an object that was checked and is clean', async () => {
+    const clean = atcObjectXml('adtcore:type="PROG" adtcore:name="ZCLEAN" adtcore:packageName="ZPKG"', '');
+
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZCLEAN', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(clean)),
+    );
+
+    expect(textOf(result)).toContain('PROG ZCLEAN (ZPKG): no findings.');
+    expect(textOf(result)).not.toContain('was not checked');
+  });
+
+  it('leads with a tool failure, ahead of any count', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(''), runAborted),
+    );
+
+    const lines = textOf(result).split('\n');
+    expect(lines[0]).toBe(
+      'WARNING: ATC reported a tool failure, so this result may be incomplete: ' +
+        'Execution of check seemingly aborted',
+    );
+  });
+
+  it('names the referenced variant only when the failing one was the system default', async () => {
+    const { result: fromDefault } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO' }),
+      atcResponder(atcWorklist(''), runAborted),
+    );
+    expect(textOf(fromDefault)).toContain('references ZREFERENCED; pass that as check_variant');
+
+    const { result: fromExplicit } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
+      atcResponder(atcWorklist(''), runAborted),
+    );
+    expect(textOf(fromExplicit)).not.toContain('pass that as check_variant');
+  });
+
+  /** SAP ignored maximumVerdicts on the tested release, so the cap is applied here too. */
+  it('caps the list at max_findings while still naming the real total', async () => {
+    const { result } = await callHandler(
+      (c) =>
+        handleGetAtcFindings(c, {
+          object_type: 'class',
+          object_name: 'ZCL_FOO',
+          check_variant: 'ZVAR',
+          max_findings: 1,
+        }),
+      atcResponder(atcWorklist(classObject)),
+    );
+
+    expect(textOf(result)).toContain('2 findings (showing 1):');
+    expect(textOf(result)).toContain('[1700]');
+    expect(textOf(result)).not.toContain('[1713]');
+  });
+
+  it('builds the object uri per type', async () => {
+    const cases: Array<[Parameters<typeof handleGetAtcFindings>[1], string]> = [
+      [{ object_type: 'program', object_name: 'ZFOO' }, '/sap/bc/adt/programs/programs/ZFOO'],
+      [{ object_type: 'class', object_name: 'ZCL_FOO' }, '/sap/bc/adt/oo/classes/ZCL_FOO'],
+      [{ object_type: 'interface', object_name: 'ZIF_FOO' }, '/sap/bc/adt/oo/interfaces/ZIF_FOO'],
+      [{ object_type: 'function_group', object_name: 'ZFG_FOO' }, '/sap/bc/adt/functions/groups/ZFG_FOO'],
+      [{ object_type: 'table', object_name: 'ZTAB' }, '/sap/bc/adt/ddic/tables/ZTAB'],
+      [{ object_type: 'cds_view', object_name: 'z_view' }, '/sap/bc/adt/ddic/ddl/sources/Z_VIEW'],
+    ];
+
+    const results = await Promise.all(
+      cases.map(([args]) =>
+        callHandler(
+          (c) => handleGetAtcFindings(c, { ...args, check_variant: 'ZVAR' }),
+          atcResponder(atcWorklist(programObject)),
+        ),
+      ),
+    );
+
+    results.forEach(({ calls }, index) => {
+      expect(calls[1].body).toContain(`adtcore:uri="${cases[index][1]}"`);
+    });
+  });
+
+  it('explains itself when the system has no default variant to fall back on', async () => {
+    const withoutVariant =
+      '<atc:customizing xmlns:atc="http://www.sap.com/adt/atc"><properties>' +
+      '<property name="ciCheckFlavour" value="true"/></properties></atc:customizing>';
+
+    const { connection } = fakeConnection((call) =>
+      call.url.pathname === '/sap/bc/adt/atc/customizing' ? { body: withoutVariant } : { body: 'WL1' },
+    );
+
+    const result = await handleGetAtcFindings(connection, { object_type: 'program', object_name: 'ZFOO' });
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('no systemCheckVariant');
+    expect(textOf(result)).toContain('Pass check_variant');
+  });
+
+  it('falls back to the raw XML for an unrecognised response shape', async () => {
+    const { result } = await callHandler(
+      (c) => handleGetAtcFindings(c, { object_type: 'program', object_name: 'ZFOO', check_variant: 'ZVAR' }),
+      atcResponder('<somethingElse/>'),
     );
 
     expect(textOf(result)).toBe('<somethingElse/>');
