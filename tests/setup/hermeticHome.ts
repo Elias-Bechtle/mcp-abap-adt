@@ -50,3 +50,26 @@ process.env.SAP_URL = '';
 process.env.SAP_USERNAME = '';
 process.env.SAP_PASSWORD = '';
 process.env.SAP_CLIENT = '';
+
+/**
+ * The environment for a child process that runs the built server. Blanking the
+ * variables above protects this process; a child gets a deliberately minimal
+ * environment of its own and so needs its own copy of the same precaution.
+ *
+ * It lives here, once, rather than in each e2e file: two suites spawn the
+ * server today and a third would otherwise be free to forget one of the two
+ * lists. Which is not hypothetical - cli.test.ts was missing exactly these
+ * four entries, and it only showed up once dist/ existed, because the suite
+ * skips itself without a build.
+ */
+export const HERMETIC_CHILD_ENV: Readonly<Record<string, string>> = {
+  PATH: process.env.PATH ?? '',
+  SystemRoot: process.env.SystemRoot ?? '',
+  HOME: HERMETIC_HOME,
+  USERPROFILE: HERMETIC_HOME,
+  XDG_CONFIG_HOME: HERMETIC_HOME,
+  SAP_URL: '',
+  SAP_USERNAME: '',
+  SAP_PASSWORD: '',
+  SAP_CLIENT: '',
+};

@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { HERMETIC_HOME } from '../setup/hermeticHome.js';
+import { HERMETIC_CHILD_ENV } from '../setup/hermeticHome.js';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const entryPoint = join(repoRoot, 'dist', 'index.js');
@@ -29,36 +29,20 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(workDir, { recursive: true, force: true });
+  // Windows holds a directory open a moment longer than the process that used
+  // it, so a plain rm reports EBUSY after the real failure and buries it.
+  await rm(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 async function startServer(args: string[] = []) {
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entryPoint, ...args],
-    // A hermetic environment and working directory: the developer's own
-    // SAP_* variables and config file must not reach this server. The home
-    // variables are redirected rather than dropped, because Node resolves a
-    // home directory from the OS when they are absent, which would let a real
-    // .mcp-abap-adtrc into the assertions.
+    // A hermetic environment and working directory: the developer's own SAP_*
+    // variables, .env and config file must not reach this server. See
+    // HERMETIC_CHILD_ENV for what each entry is holding back.
     cwd: workDir,
-    env: {
-      PATH: process.env.PATH ?? '',
-      SystemRoot: process.env.SystemRoot ?? '',
-      HOME: HERMETIC_HOME,
-      USERPROFILE: HERMETIC_HOME,
-      XDG_CONFIG_HOME: HERMETIC_HOME,
-      // index.ts's loadPackageEnvFile() reads a .env sitting next to the
-      // installed package, resolved from the script's own location rather
-      // than cwd - the redirects above don't reach it. process.loadEnvFile
-      // never overwrites an already-set variable, so pre-setting these empty
-      // blocks a developer's real .env (with real SAP credentials) from
-      // reaching this child process the way HOME redirection blocks .mcp-abap-adtrc.
-      SAP_URL: '',
-      SAP_USERNAME: '',
-      SAP_PASSWORD: '',
-      SAP_CLIENT: '',
-    },
+    env: { ...HERMETIC_CHILD_ENV },
     stderr: 'pipe',
   });
 
@@ -79,7 +63,12 @@ function firstText(result: Record<string, unknown>): string {
   return content[0].text;
 }
 
-describe.skipIf(!built)('server over stdio', () => {
+/**
+ * 60 s rather than vitest's default 5 s, for the reason cli.test.ts sets out:
+ * spawning node and completing the MCP handshake is fast until the machine is
+ * busy, and a timeout here would report the clock rather than the server.
+ */
+describe.skipIf(!built)('server over stdio', { timeout: 60_000 }, () => {
   it('completes the MCP handshake and reports its real version', async () => {
     const { client } = await startServer();
 
