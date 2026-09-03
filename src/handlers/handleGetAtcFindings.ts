@@ -1,6 +1,8 @@
 import convert from 'xml-js';
 
 import type { SapConnection } from '../connection/SapConnection.js';
+import { uriFragmentFields } from '../lib/adtUri.js';
+import { asArray } from '../lib/dataPreview.js';
 import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
 export type AtcObjectType = 'program' | 'class' | 'interface' | 'function_group' | 'table' | 'cds_view';
@@ -24,12 +26,6 @@ const OBJECT_URI: Record<AtcObjectType, (name: string) => string> = {
 
 /** ATC runs invoke every check in the variant; they take longer than a metadata read. */
 const ATC_TIMEOUT_FLOOR_MS = 120_000;
-
-/** xml-js compact mode collapses a single child to an object rather than an array. */
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (value === undefined) return [];
-  return Array.isArray(value) ? value : [value];
-}
 
 function attr(node: any, ...names: string[]): string {
   const attrs = node?._attributes ?? {};
@@ -71,23 +67,20 @@ interface AtcObject {
 }
 
 /**
- * `atcfinding:location` folds the position into a URI fragment, and it does so
- * in two shapes that a single-shape parser would silently drop half of:
+ * `atcfinding:location` folds the position into a URI fragment, in two shapes
+ * that a single-shape parser would silently drop half of:
  *
  *   .../source/main#start=8,0
  *   .../source/main#type=CLAS%2FOM;name=IF_OO_ADT_CLASSRUN%7eMAIN;start=32
  *
- * The second omits the column and names the sub-object, so the column is not
- * read at all and `name=` is worth keeping: "line 32" alone misleads in a
- * class, where the line is counted inside the method rather than in the file.
+ * The second omits the column and names the sub-object, so only the line is
+ * read and `name=` is worth keeping: "line 32" alone misleads in a class,
+ * where the line is counted inside the method rather than in the file.
  */
 function parseLocation(location: string): { line: number; subObject: string } {
-  const start = /start=(\d+)/u.exec(location);
-  const name = /[#;]name=([^;]*)/u.exec(location);
-  return {
-    line: start ? Number(start[1]) : 0,
-    subObject: name ? decodeURIComponent(name[1]) : '',
-  };
+  const fields = uriFragmentFields(location);
+  const line = /^(\d+)/u.exec(fields.start ?? '');
+  return { line: line ? Number(line[1]) : 0, subObject: fields.name ?? '' };
 }
 
 /**

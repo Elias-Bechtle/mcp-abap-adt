@@ -1,6 +1,7 @@
 import convert from 'xml-js';
 
 import type { SapConnection } from '../connection/SapConnection.js';
+import { asArray } from '../lib/dataPreview.js';
 import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
 export type CheckableObjectType = 'program' | 'class' | 'interface';
@@ -11,12 +12,6 @@ const SOURCE_PATH: Record<CheckableObjectType, (name: string) => string> = {
   class: (name) => `/sap/bc/adt/oo/classes/${encodeURIComponent(name)}/source/main`,
   interface: (name) => `/sap/bc/adt/oo/interfaces/${encodeURIComponent(name)}/source/main`,
 };
-
-/** xml-js compact mode collapses a single child to an object rather than an array. */
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (value === undefined) return [];
-  return Array.isArray(value) ? value : [value];
-}
 
 interface CheckMessage {
   severity: string;

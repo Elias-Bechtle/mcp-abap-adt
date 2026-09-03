@@ -1,6 +1,7 @@
 import convert from 'xml-js';
 
 import type { SapConnection } from '../connection/SapConnection.js';
+import { asArray } from '../lib/dataPreview.js';
 import { return_error, return_text, type ToolResult } from '../lib/result.js';
 
 export type UsageObjectType = 'program' | 'class' | 'interface' | 'table' | 'cds_view';
@@ -13,12 +14,6 @@ const OBJECT_URI: Record<UsageObjectType, (name: string) => string> = {
   table: (name) => `/sap/bc/adt/ddic/tables/${encodeURIComponent(name)}`,
   cds_view: (name) => `/sap/bc/adt/ddic/ddl/sources/${encodeURIComponent(name.toUpperCase())}`,
 };
-
-/** xml-js compact mode collapses a single child to an object rather than an array. */
-function asArray<T>(value: T | T[] | undefined): T[] {
-  if (value === undefined) return [];
-  return Array.isArray(value) ? value : [value];
-}
 
 function attr(node: any, ...names: string[]): string {
   const attrs = node?._attributes ?? {};
