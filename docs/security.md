@@ -10,6 +10,7 @@ Turning `allowFreeSql` off deserves a clear-eyed look at what it achieves: `GetT
 
 `store-credentials`, `doctor` and `setup` are CLI subcommands, not MCP tools: a model cannot invoke them.
 
+Several read-only tools use POST, which is worth naming before it looks like an oversight. ADT expects a payload in the request body for some reads, so the method says nothing about the effect: `ExecuteQuery` and `GetTableContents` POST a SELECT, `GetWhereUsed` POSTs a fixed body and names its target in the query string, and `CheckSyntax` POSTs the source text to be checked — which is the point, since it checks text the caller supplies rather than what is stored, and nothing is saved or activated.
 ## Why `importFioriSystems` is off by default
 
 Turning it on gives a model read access to every system you have saved in SAP Fiori tools, production among them — that is a decision to make, not to inherit. To keep the option findable anyway, a server with nothing configured names the systems it could have adopted:
