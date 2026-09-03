@@ -47,7 +47,15 @@ function expectTextResult(result: ToolResult) {
   expect(result.content[0].type).toBe('text');
 }
 
-describe.skipIf(!runLive)('live ADT integration', () => {
+/**
+ * A test timeout has to be looser than the transport timeout it wraps, or a
+ * slow system answers into a test that has already given up - and "test timed
+ * out in 5000ms" replaces whatever SAP was about to say. vitest defaults to
+ * 5 s while a connection defaults to 60 s, which made ordinary reads fail at
+ * random over a VPN. This is the outer bound; the ATC suite widens it further,
+ * because ATC runs get a 120 s floor of their own.
+ */
+describe.skipIf(!runLive)('live ADT integration', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     // The hermetic-home setup hides the developer's real configuration from
     // the unit tests; this suite exists to use it, so it takes it back.
