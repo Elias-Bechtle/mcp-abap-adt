@@ -22,13 +22,23 @@ Nothing is written and nothing is executed. The check-run reporter compiles the 
 
 `GetAtcFindings` is the exception to "reads change nothing", and it is more honest to describe it than to let the word read-only carry it.
 
-ADT offers no way to run an ATC check with a GET. Starting one takes three requests, and the first of them — `POST /sap/bc/adt/atc/worklists` — creates an ATC worklist: a result container with an id of its own, owned by the calling user, which the following two requests fill and then read. It is not an ABAP repository object. Nothing is locked, activated, or written to a transport, no Customizing entry and no business data is touched, and SAP's own ATC housekeeping reclaims the container.
+ADT offers no way to run an ATC check with a GET. Starting one takes three requests, and the first of them — `POST /sap/bc/adt/atc/worklists` — creates an ATC worklist: a result container with an id of its own, owned by the calling user, which the following two requests fill and then read.
+
+Concretely it is a row in `SATC_AC_RESULTH`, valid for ten days from creation, after which ATC housekeeping removes it. It is deliberately *not* described here as transient: that table has an `is_transient` flag, and on these rows it is not set, so the word would mislead. It is not an ABAP repository object either. Nothing is locked, activated, or written to a transport, and no Customizing entry or business data is touched. It is the same record Eclipse creates on every "Run ATC", so a development system holds a steady population of them from ordinary developer and transport-release checks.
 
 What makes this defensible is not that argument, though, but SAP's own classification. The resource handler `CL_SATC_ADT_RES_WORKLIST` runs the *identical* authority check for `POST` as it does for `GET` — `display_result( )` in both methods — and that check resolves to `S_DEVELOP` activity 03 (Display) or, failing that, `S_Q_ADM` activity 16 (Execute). Neither 01 (Create) nor 02 (Change) appears anywhere on that path, while the genuinely mutating ATC operations in the same access-control class do demand them: changing a result, deleting one, approving an exemption. By SAP's own authorization model, creating a worklist is a display operation.
 
 One worklist per call, deliberately. MCP clients may run tool calls in parallel, and a shared container would let one call's run overwrite the "Last Check Run" object set another call is about to read.
 
 So the guarantee this server makes is precise rather than absolute: no ABAP repository object, Customizing entry or business data is ever modified, and nothing is transportable. A caller who wants even that container not to exist should not offer the tool.
+
+### Why the check variant is validated first
+
+`GetAtcFindings` refuses a check variant the system does not offer instead of running it, which is unusual enough to justify. SAP does not reject an unusable variant: it silently substitutes its own default and answers with that variant's findings, and nothing in the response says which variant executed.
+
+The measurements, against one class on one system: an invented name, a name that existed but was not released for general use, and sending no name at all each produced the identical eight findings — while three variants the system genuinely offered produced nine, eight and none. So the substitution is real and it is invisible.
+
+An answer naming a variant that never ran is the one failure this tool exists to prevent, which is why the variant is checked against `GET /sap/bc/adt/atc/variants` before anything else happens — and, incidentally, before a worklist is created, so a rejected variant leaves nothing behind either. ADT's own client refuses the same names and goes by the same list.
 
 ## Why `importFioriSystems` is off by default
 

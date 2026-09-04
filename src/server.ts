@@ -263,8 +263,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       'actually enforces, which a syntax check does not reveal. Use it to see whether generated or ' +
       'proposed code violates the active check variant; findings carry a priority where 1 is the most ' +
       'severe. Note what this does on the server, since ADT offers no read-only way to run a check: the ' +
-      'call creates a transient ATC worklist, a result container owned by the calling user. No repository ' +
-      'object, Customizing entry or business data is changed, and nothing is locked, activated or transported.',
+      'call creates an ATC worklist, a result container owned by the calling user that stays valid for ten ' +
+      'days and is then removed by ATC housekeeping. No repository object, Customizing entry or business ' +
+      'data is changed, and nothing is locked, activated or transported.',
     {
       object_type: z
         .enum(['program', 'class', 'interface', 'function_group', 'table', 'cds_view'])

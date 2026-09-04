@@ -382,7 +382,7 @@ The object you name only lends context: its kind, its includes, its class hierar
 `GetWhereUsed` runs the same lookup as Eclipse ADT's Ctrl+Shift+H. Two things about the answer are worth knowing, because SAP's raw response is misleading:
 
 - **Only real usages are listed.** SAP flattens a tree into one list, in which packages and function groups appear as grouping nodes for the hits beneath them. They are not usages, and the count of dropped nodes is reported so the filter can be checked.
-- **The total is always named, even when the list is cut.** A widely used standard object has hundreds of usages — `T100` has 735 — so `max_results` defaults to 100. A header line states the real total, so a shortened answer can never be mistaken for a short one.
+- **The total is always named, even when the list is cut.** A widely used standard object can have hundreds of usages, so `max_results` defaults to 100. A header line states the real total, so a shortened answer can never be mistaken for a short one.
 
 ### Quality rules a system actually enforces
 
@@ -390,7 +390,7 @@ The object you name only lends context: its kind, its includes, its class hierar
 
 Which rules those are depends entirely on the **check variant**. There is no universal default, so `check_variant` is optional and falls back to the variant the system itself has configured (`systemCheckVariant` in the ATC customizing), exactly as ADT does for "Run ABAP Test Cockpit".
 
-A variant the system does not offer is **rejected**, with the names it does offer, rather than run — and that check is worth more than it sounds. SAP does not refuse an unusable variant: it silently runs its own default and answers with that variant's findings, and nothing in the response says which variant executed. Measured against a live system, an invented name, a name that existed but was not released for general use, and sending no name at all all produced the identical eight findings on the same class, while three genuinely offered variants produced nine, eight and none. Without the check, an answer would name a variant that never ran — which is exactly the false confidence this tool exists to prevent. The variant is validated before the worklist is created, so a rejected one also leaves nothing behind.
+A variant the system does not offer is **rejected**, with the names it does offer, rather than run. That matters more than it sounds: SAP does not refuse an unusable variant but silently runs its own default instead, and nothing in the response says which variant executed — so without the check an answer could name a variant that never ran. [The security model](docs/security.md#the-one-tool-that-leaves-something-behind) has the measurements behind that.
 
 Three outcomes are deliberately kept apart, because conflating them is how a model concludes that unchecked code is fine:
 
