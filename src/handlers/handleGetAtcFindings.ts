@@ -24,9 +24,6 @@ const OBJECT_URI: Record<AtcObjectType, (name: string) => string> = {
   cds_view: (name) => `/sap/bc/adt/ddic/ddl/sources/${encodeURIComponent(name.toUpperCase())}`,
 };
 
-/** ATC runs invoke every check in the variant; they take longer than a metadata read. */
-const ATC_TIMEOUT_FLOOR_MS = 120_000;
-
 function attr(node: any, ...names: string[]): string {
   const attrs = node?._attributes ?? {};
   for (const name of names) {
@@ -345,7 +342,6 @@ export async function handleGetAtcFindings(
     await assertVariantIsOffered(connection, variant);
 
     const uri = OBJECT_URI[args.object_type](args.object_name);
-    const timeoutMs = Math.max(connection.config.timeoutMs, ATC_TIMEOUT_FLOOR_MS);
     const maxFindings = args.max_findings ?? 100;
 
     // Step 1: the result container. Its id comes back as plain text.
@@ -353,7 +349,6 @@ export async function handleGetAtcFindings(
       method: 'POST',
       query: { checkVariant: variant },
       headers: { Accept: 'text/plain, */*' },
-      timeoutMs,
     });
     const worklistId = worklist.data.trim();
     if (!worklistId) {
@@ -381,7 +376,6 @@ export async function handleGetAtcFindings(
       query: { worklistId },
       body,
       headers: { 'Content-Type': 'application/xml', Accept: 'application/xml, application/*' },
-      timeoutMs,
     });
     const { stats, failures } = parseRunInfos(run.data);
 
@@ -398,7 +392,6 @@ export async function handleGetAtcFindings(
     const findings = await connection.request(`/sap/bc/adt/atc/worklists/${encodeURIComponent(worklistId)}`, {
       method: 'GET',
       headers: { Accept: 'application/atc.worklist.v1+xml' },
-      timeoutMs,
     });
 
     const objects = parseWorklist(findings.data);
